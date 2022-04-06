@@ -75,6 +75,73 @@ enum Value {
     None,
     IntNumber(i32),
     FloatNumber(f32),
+    String(String),
+}
+
+impl From<&str> for Value {
+    fn from(v: &str) -> Self {
+        Self::String(v.to_string())
+    }
+}
+
+impl From<f32> for Value {
+    fn from(v: f32) -> Self {
+        Self::FloatNumber(v)
+    }
+}
+
+impl From<i32> for Value {
+    fn from(v: i32) -> Self {
+        Self::IntNumber(v)
+    }
+}
+
+impl Value {
+    fn plus(&self, b: &Value) -> Option<Value> {
+        match (self, b) {
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x+y )),
+            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x+(*y as f32) )),
+            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x+y )),
+            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)+y )),
+            _ => None,
+        }
+    }
+    fn modulus(&self, b: &Value) -> Option<Value> {
+        match (self, b) {
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x%y )),
+            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x%(*y as f32) )),
+            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x%y )),
+            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)%y )),
+            _ => None,
+        }
+    }
+    fn multiply(&self, b: &Value) -> Option<Value> {
+        match (self, b) {
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x*y )),
+            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x*(*y as f32) )),
+            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x*y )),
+            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)*y )),
+            _ => None,
+        }
+    }
+    fn divide(&self, b: &Value) -> Option<Value> {
+        match (self, b) {
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x/y )),
+            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x/(*y as f32) )),
+            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x/y )),
+            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)/y )),
+            _ => None,
+        }
+    }
+    fn minus(&self, b: &Value) -> Option<Value> {
+        match (self, b) {
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x+y )),
+            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x+(*y as f32) )),
+            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x+y )),
+            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)+y )),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -313,7 +380,7 @@ impl Parser {
         }
     }
 
-    fn parse<F: FnMut(&Node)>(&mut self, token: VecDeque<Token>, mut evaluator: F) -> Result<Vec<Rc<Node>>,String> 
+    fn parse(&mut self, token: VecDeque<Token>, e: &mut Interpreter) -> Result<Vec<Rc<Node>>,String> 
     {
         self.input = token;
         self.shift_input();
@@ -324,7 +391,7 @@ impl Parser {
                 break;
             }
             let n = self.stmt()?;
-            evaluator(&n);
+            e.evaluate(&n);
             ast.push(Rc::new(n));
         }
         return Ok(ast);
@@ -332,7 +399,7 @@ impl Parser {
 }
 #[derive(Debug)]
 struct Interpreter {
-    vars: HashMap<String,i32>,
+    vars: HashMap<String,Value>,
     func: HashMap<String,Rc<Node>>,
     ast: Vec<Rc<Node>>,
     line: u32,
@@ -394,22 +461,62 @@ impl Interpreter {
         println!("tokens: {:?}", tokens);
 
         let mut parser = Parser::new();
-        let cell = Rc::new(RefCell::new(self));
-        let o = Rc::clone(&cell);
 
-        parser.parse(
-            tokens, 
-            move|n| {
-                let mut e = cell.borrow_mut();
-                e.evaluate(n);
-            })?;
+        parser.parse( tokens, self )?;
 
         return Ok(None);
     }
 
     pub fn evaluate(&mut self, ast: &Node) -> Result<(),String> {
         println!("AST=>>>>{:?}", ast);
+        println!("result(AST)={:?}", self.visit(ast));
         return Ok(());
+    }
+
+    fn visit(&mut self, n: &Node) -> Result<Value,String> {
+        match n {
+            Node::BinOp{left, op, right} => { 
+                let a = self.visit(left)?;
+                let b = self.visit(right)?;
+                println!("DEBUG(BinOp) = {:?}, {:?}, op={:?}", a, b, op);
+                let r = match op.as_str() {
+                    "+" => a.plus(&b),
+                    "-" => a.minus(&b),
+                    "/" => a.divide(&b),
+                    "*" => a.multiply(&b),
+                    "%" => a.modulus(&b),
+                    "=" => {
+                        let var_value: Option<Value> = match a {
+                            Value::String(var_name) =>  {
+                                println!("DEBUG(var table) = {:?}, {:?}", var_name, b);
+                                self.vars.insert(var_name, b.clone());
+                                Some(b)
+                            },
+                            _ => {
+                                None
+                            }
+                        };
+                        var_value
+                    },
+                    _ => {
+                        None
+                    },
+                }.unwrap();
+                return Ok(r);
+            },
+            Node::FunctionDef{name, params, body} => {},
+            Node::FunctionCall{name, params} => {},
+            Node::Num{value} => {return Ok(value.to_owned());},
+            Node::Identifier{value} => {
+                let v = self.vars.get(value);
+                if v.is_some() {
+                    return Ok( v.unwrap().clone() );
+                }
+                return Ok( Value::String(value.to_owned()) );
+            },
+            _ => {},
+        }
+        return Ok(Value::None);
     }
 }
 
@@ -423,14 +530,14 @@ impl Default for Interpreter {
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     //i.input("1 + 1");
-    i.input("a + b + c + 1");
-    i.input("fn avg a b c => a + b + c + 1");
-    i.input("avg a b c");
+    //i.input("a + b + c + 1");
+    //i.input("fn avg a b c => a + b + c + 1");
+    //i.input("avg a b c");
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");
     //i.input("8 + 4 / 3 + (4 *2) % 3");
-    //i.input("i = 4 / 3 + (4 *2) % 3");
+    i.input("i = 4 / 3 + (4 *2) % 3");
     //i.input("7 % 4");
 }
 
