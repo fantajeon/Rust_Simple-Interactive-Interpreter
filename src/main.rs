@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::{collections::{HashMap, VecDeque}};
+use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell};
 
 /*
 stat            ::= function | expression
@@ -40,11 +40,33 @@ enum Kind {
 }
 
 impl Kind {
-    fn op<'a>(self) -> Option<String> {
+    fn op<'a>(&self) -> Option<&String> {
         match self {
             Kind::Op(v) => Some(v),
             _ => None,
         }
+    }
+
+    fn take_letter(&mut self) -> Option<String> {
+        match self {
+            Kind::Letter(v) => {
+                Some(std::mem::replace(v, "".to_string()))
+            },
+            _ => None,
+        }
+    }
+
+    fn take_op(&mut self) -> Option<String> {
+        match self {
+            Kind::Op(v) => {
+                Some(std::mem::replace(v, "".to_string()))
+            },
+            _ => None,
+        }
+    }
+
+    fn is_op(&self) -> bool {
+        is_enum_variant!(self, Kind::Op(_))
     }
 }
 
@@ -58,10 +80,14 @@ enum Value {
 #[derive(Debug)]
 enum Node {
     None,
-    Function{ 
-        name: Token, 
-        params: Box<Vec<Token>>, 
-        right: Box<Node>,
+    FunctionDef{ 
+        name: String, 
+        params: Vec<Token>,
+        body: Box<Node>,
+    },
+    FunctionCall {
+        name: String, 
+        params: Vec<Node>,
     },
     BinOp{ 
         left: Box<Node>, 
@@ -83,8 +109,19 @@ impl Token {
         Token{kind: Box::new(v), value: Value::None}
     }
 
+    fn is_none(&self) -> bool {
+        is_enum_variant!(*self.kind, Kind::None)
+    }
+    fn is_op(&self) -> bool {
+        is_enum_variant!(*self.kind, Kind::Op(_))
+    }
+
     fn take(&mut self) -> Token {
         std::mem::replace(self,Token::default())
+    }
+
+    fn replace(&mut self, tok: Token) -> Token {
+        std::mem::replace(self, tok)
     }
 
     fn take_if<F: FnOnce(&Self) -> bool>(&mut self, predicate: F) -> Option<Self> {
@@ -101,12 +138,204 @@ impl Default for Token {
         Token{kind: Box::new(Kind::None), value: Value::None}
     }
 }
+
+#[derive(Debug)]
+struct Parser {
+    curr_token: Token,
+    input: VecDeque<Token>,
+}
+impl Default for Parser {
+    fn default() -> Self { 
+        Parser { curr_token: Token::default(), input: VecDeque::new() }
+    }
+}
+impl Parser {
+    fn new() -> Self {
+        Parser { 
+            curr_token: Token::default(),
+            input: VecDeque::new(),
+        }
+    }
+
+    fn shift_input(&mut self) -> Token {
+        let new = self.input.pop_front().unwrap_or(Token::default());
+        println!("new_token! {:?}", new);
+        return std::mem::replace( &mut self.curr_token, new);
+    }
+
+    fn _function_parameter(&mut self) -> Result<Vec<Token>, String> {
+        let mut result: Vec<Token> = Vec::new();
+        while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
+            let ct = self.curr_token.take();
+            result.push(ct);
+            self.shift_input();
+        }
+        return Ok(result);
+    }
+
+    fn _function_expression(&mut self) -> Result<Node, String> {
+        if let Kind::Op(v) = &*self.curr_token.kind {
+            if v == "=>" {
+                self.shift_input();
+                return self._expression();
+            }
+        }
+        return Err("Syntax Error! function Expression".to_string());
+    }
+
+    fn _function(&mut self) -> Result<Node,String> {
+        if let Kind::Letter(fn_name) = &*self.curr_token.kind {
+            println!("fn-name: {}", fn_name);
+            let mut ct = self.curr_token.take();
+            self.shift_input();
+            let result = Node::FunctionDef { 
+                name: (*ct.kind).take_letter().unwrap(), 
+                params: self._function_parameter()?, 
+                body: Box::new(self._function_expression()?), 
+            };
+            return Ok(result);
+        }
+        return Err("Syntax Error! function must have fn-name".to_string());
+    }
+
+    fn _factor(&mut self) -> Result<Node,String> {
+        println!("factor! {:?}", self.curr_token);
+        match &*self.curr_token.kind {
+            Kind::FloatNumber(v) => {
+                let n = Node::Num { value: Value::FloatNumber(*v) };
+                self.shift_input();
+                return Ok(n);
+            },
+            Kind::IntNumber(v) => {
+                let n = Node::Num { value: Value::IntNumber(*v) };
+                self.shift_input();
+                return Ok(n);
+            },
+            Kind::Letter(var) => {
+                let n = Node::Identifier { value: var.clone() };
+                self.shift_input();
+                let mut ct = self.curr_token.take();
+                if let Kind::Op(v) = &*ct.kind {
+                    if v == "=" {
+                        self.shift_input();
+                        let expr_node = self._expression()?;
+                        let node = Node::BinOp { 
+                            left: Box::new(n), 
+                            op: ct.kind.take_op().unwrap(),
+                            right: Box::new(expr_node) 
+                        };
+                        return Ok(node);
+                    } 
+                } 
+                self.curr_token.replace(ct);
+                return Ok(n);
+            },
+            Kind::Op(v) => {
+                if v == "(" {
+                    self.shift_input();
+                    let n = self._expression()?;
+                    if let Kind::Op(v) = &*self.curr_token.kind {
+                        if v != ")" {
+                            return Err("Expected String: )".to_string());
+                        }
+                    }
+                    self.shift_input();
+                    return Ok(n);
+                } else {
+                    return Err("Unknown Syntax".to_string());
+                }
+            },
+            _ => { },
+        }
+        println!("Factor Error!");
+        return Err("Unknown Rules!".to_string());
+    }
+
+    fn _term(&mut self) -> Result<Node,String> {
+        println!("term! {:?}", self.curr_token);
+        let result = self._factor()?;
+        if let Some(mut tok) = self.curr_token.take_if(|v| v.kind.is_op()) {
+            let v = tok.kind.op().unwrap();
+            if v == "*" || v == "/" || v == "%" {
+                self.shift_input();
+                let right = self._term()?;
+                let n = Node::BinOp { 
+                    left: Box::new(result), 
+                    op: tok.kind.take_op().unwrap(),
+                    right: Box::new(right),
+                };
+                return Ok(n);
+            } else {
+                self.curr_token.replace(tok);
+            }
+        }
+        return Ok(result);
+    }
+
+    fn _expression(&mut self) -> Result<Node,String> {
+        println!("expression entry");
+        let mut result = self._term()?;
+
+        println!("expression, curr_token={:?}", self.curr_token);
+        if let Some(mut tok) = self.curr_token.take_if(|t| 
+            is_enum_variant!(*t.kind, Kind::Op(_))
+        ) {
+            println!("BinOps: {:?}", tok);
+            let v = (*tok.kind).op().unwrap();
+            if v == "+" || v == "-" {
+                self.shift_input();
+                result = Node::BinOp { 
+                    left: Box::new(result), 
+                    op: tok.kind.take_op().unwrap(),
+                    right: Box::new(self._expression()?), 
+                };
+            } else {
+                self.curr_token.replace(tok);
+            }
+        }
+        return Ok(result);
+    }
+
+    fn stmt(&mut self) -> Result<Node,String> {
+        println!("start stmt with curr_token: {:?}, input={:?}", self.curr_token, self.input);
+        match &*self.curr_token.kind {
+            Kind::Keyword(v) => {
+                println!("keyword={}", v);
+                if v != "fn" {
+                    return Err("syntax error!".to_string());
+                } 
+                self.shift_input();
+                return self._function();
+            },
+            _ => {
+                return self._expression();
+            },
+        }
+    }
+
+    fn parse<F: FnMut(&Node)>(&mut self, token: VecDeque<Token>, mut evaluator: F) -> Result<Vec<Rc<Node>>,String> 
+    {
+        self.input = token;
+        self.shift_input();
+        let mut ast: Vec<Rc<Node>> = Vec::new();
+        loop {
+            if self.curr_token.is_none() {
+                println!("EOF!");
+                break;
+            }
+            let n = self.stmt()?;
+            evaluator(&n);
+            ast.push(Rc::new(n));
+        }
+        return Ok(ast);
+    }
+}
 #[derive(Debug)]
 struct Interpreter {
     vars: HashMap<String,i32>,
-    curr_token: Token,
-    input: VecDeque<Token>,
-    ast: Vec<Node>,
+    func: HashMap<String,Rc<Node>>,
+    ast: Vec<Rc<Node>>,
+    line: u32,
 }
 
 fn lexer(express: &str) -> VecDeque<Token> {
@@ -123,13 +352,19 @@ fn lexer(express: &str) -> VecDeque<Token> {
         //println!("cap={:?}", cap);
         let tok = re.capture_names()
             .flatten()
-            .filter_map(|n| Some((n,cap.name(n)?.as_str().to_string())))
+            .filter_map(|n| {
+                return Some((n,cap.name(n)?.as_str().to_string()));
+            })
             .take(1).next().unwrap();
-        println!("tok={:?}", tok);
+        //println!("tok={:?}", tok);
         let t: Option<Token> = match tok.0 {
             "int" => Some( Token::new( Kind::IntNumber(tok.1.parse::<i32>().unwrap())) ),
             "float" => Some( Token::new( Kind::FloatNumber(tok.1.parse::<f32>().unwrap())) ),
-            "letter" => Some( Token::new( Kind::Letter(tok.1)) ),
+            "letter" => if tok.1 == "fn" {
+                Some( Token::new( Kind::Keyword(tok.1)) )
+            } else {
+                Some( Token::new( Kind::Letter(tok.1)) )
+            },
             "ops" | "fn_op" => Some( Token::new( Kind::Op(tok.1)) ),
             _ => None,
         };
@@ -138,6 +373,7 @@ fn lexer(express: &str) -> VecDeque<Token> {
             toks.push_back(t.unwrap());
         }
     }
+
     return toks;
 }
 
@@ -145,134 +381,34 @@ impl Interpreter {
     fn new() -> Self {
         Interpreter { 
             vars: HashMap::new(), 
-            curr_token: Token::default(),
-            input: VecDeque::new(),
+            func: HashMap::new(), 
             ast: Vec::new(),
+            line: 0,
         }
     }
 
     fn input(&mut self, input: &str) -> Result<Option<f32>, String> {
-        println!("tokenizing={}", input);
-        let mut tokens = lexer(input);
+        self.line += 1;
+        println!("tokenizing={} @ line{}", input, self.line);
+        let tokens = lexer(input);
         println!("tokens: {:?}", tokens);
-        //if tokens.len() > 2 && tokens[1] == "" {
-        //    let new_var: &String = &tokens[0];
-        //    self.vars.insert(new_var.into(), 1);
-        //}
-        //unimplemented!()
-        self.parse(tokens);
-        println!("AST={:?}", self.ast);
-        return Err("not implemented!".to_string());
+
+        let mut parser = Parser::new();
+        let cell = Rc::new(RefCell::new(self));
+        let o = Rc::clone(&cell);
+
+        parser.parse(
+            tokens, 
+            move|n| {
+                let mut e = cell.borrow_mut();
+                e.evaluate(n);
+            })?;
+
+        return Ok(None);
     }
 
-    fn pop_token(&mut self) -> Token {
-        let new = self.input.pop_front().unwrap_or(Token::default());
-        println!("new_token! {:?}", new);
-        return std::mem::replace( &mut self.curr_token, new);
-    }
-
-    fn _function(&mut self) -> Result<Node,String> {
-        return Ok(Node::None);
-    }
-
-    fn _factor(&mut self) -> Result<Node,String> {
-        println!("factor! {:?}", self.curr_token);
-        match &*self.curr_token.kind {
-            Kind::FloatNumber(v) => {
-                let n = Node::Num { value: Value::FloatNumber(*v) };
-                self.pop_token();
-                return Ok(n);
-            },
-            Kind::IntNumber(v) => {
-                let n = Node::Num { value: Value::IntNumber(*v) };
-                self.pop_token();
-                return Ok(n);
-            },
-            Kind::Letter(var) => {
-                let n = Node::Identifier { value: var.clone() };
-                self.pop_token();
-                let ct = self.curr_token.take();
-                if let Kind::Op(v) = &*ct.kind {
-                    if v == "=" {
-                        self.pop_token();
-                        let expr_node = self._expression()?;
-                        let node = Node::BinOp { 
-                            left: Box::new(n), 
-                            op: v.clone(),
-                            right: Box::new(expr_node) 
-                        };
-                        return Ok(node);
-                    } 
-                } else {
-                    self.curr_token = ct;
-                }
-                return Ok(n);
-            },
-            Kind::Op(v) => {
-                if v == "(" {
-                    self.pop_token();
-                    let n = self._expression()?;
-                    if let Kind::Op(v) = &*self.curr_token.kind {
-                        if v != ")" {
-                            return Err("Expected String: )".to_string());
-                        }
-                    }
-                    self.pop_token();
-                    return Ok(n);
-                } else {
-                    return Err("Unknown Syntax".to_string());
-                }
-            },
-            _ => { },
-        }
-        println!("Factor Error!");
-        return Err("Unknown Rules!".to_string());
-    }
-
-    fn _expression(&mut self) -> Result<Node,String> {
-        let result = self._factor()?;
-        if let Some(v) = self.curr_token.take_if(|t| 
-            is_enum_variant!(*t.kind, Kind::Op(_))
-        ) {
-            println!("BinOps: {:?}, result={:?}", v, result);
-            let t = (*v.kind).op().unwrap();
-            self.pop_token();
-            let n = Node::BinOp { 
-                left: Box::new(result), 
-                op: t,
-                right: Box::new(self._expression()?), 
-            };
-
-            return Ok(n);
-        } 
-        return Ok(result);
-    }
-
-    fn stmt(&mut self) -> Result<Node,String> {
-        println!("start stmt with curr_token: {:?}, input={:?}", self.curr_token, self.input);
-        self.pop_token();
-        match &*self.curr_token.kind {
-            Kind::Keyword(v) => {
-                println!("keyword={}", v);
-                if v != "fn" {
-                    return Err("syntax error!".to_string());
-                } 
-                self.pop_token();
-                return self._function();
-            },
-            _ => {
-                return self._expression();
-            },
-        }
-    }
-
-    fn parse(&mut self, mut token: VecDeque<Token>) -> Result<(),String> {
-        self.input = token;
-        self.ast = Vec::new();
-        while self.input.len() > 0 {
-            let n = self.stmt()?;
-            self.ast.push(n);
-        }
+    pub fn evaluate(&mut self, ast: &Node) -> Result<(),String> {
+        println!("AST=>>>>{:?}", ast);
         return Ok(());
     }
 }
@@ -287,11 +423,14 @@ impl Default for Interpreter {
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     //i.input("1 + 1");
-    //i.input("=> fn avg a + 1");
+    i.input("a + b + c + 1");
+    i.input("fn avg a b c => a + b + c + 1");
+    i.input("avg a b c");
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");
-    i.input("8 / 4 + 3");
+    //i.input("8 + 4 / 3 + (4 *2) % 3");
+    //i.input("i = 4 / 3 + (4 *2) % 3");
     //i.input("7 % 4");
 }
 
