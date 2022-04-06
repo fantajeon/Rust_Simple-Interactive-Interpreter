@@ -150,7 +150,7 @@ enum Node {
     FunctionDef{ 
         name: String, 
         params: Vec<Token>,
-        body: Box<Node>,
+        body: Rc<Node>,
     },
     FunctionCall {
         name: String, 
@@ -258,7 +258,7 @@ impl Parser {
             let result = Node::FunctionDef { 
                 name: (*ct.kind).take_letter().unwrap(), 
                 params: self._function_parameter()?, 
-                body: Box::new(self._function_expression()?), 
+                body: Rc::new(self._function_expression()?), 
             };
             return Ok(result);
         }
@@ -470,6 +470,7 @@ impl Interpreter {
     pub fn evaluate(&mut self, ast: &Node) -> Result<(),String> {
         println!("AST=>>>>{:?}", ast);
         println!("result(AST)={:?}", self.visit(ast));
+        println!("(fn)={:?}", self.func);
         return Ok(());
     }
 
@@ -504,7 +505,10 @@ impl Interpreter {
                 }.unwrap();
                 return Ok(r);
             },
-            Node::FunctionDef{name, params, body} => {},
+            Node::FunctionDef{name, params, body} => {
+                self.func.insert( name.to_owned(), Rc::clone( body ) );
+                return Ok(Value::None);
+            },
             Node::FunctionCall{name, params} => {},
             Node::Num{value} => {return Ok(value.to_owned());},
             Node::Identifier{value} => {
@@ -531,13 +535,13 @@ fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     //i.input("1 + 1");
     //i.input("a + b + c + 1");
-    //i.input("fn avg a b c => a + b + c + 1");
+    i.input("fn avg a b c => a + b + c + 1");
     //i.input("avg a b c");
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");
     //i.input("8 + 4 / 3 + (4 *2) % 3");
-    i.input("i = 4 / 3 + (4 *2) % 3");
+    //i.input("i = 4 / 3 + (4 *2) % 3");
     //i.input("7 % 4");
 }
 
