@@ -397,10 +397,69 @@ impl Parser {
         return Ok(ast);
     }
 }
+
+#[derive(Debug)]
+enum SymKind {
+    Value{value: Rc<Value>},
+    Function{node: Rc<Node>},
+}
+#[derive(Debug)]
+ struct SymValue {
+    name: String,
+    kind: SymKind,
+}
+
+impl SymValue {
+    fn get_name(&self) -> &String {
+        return &self.name;
+    }
+    
+    fn get_value(&self) -> Option<Rc<Value>> {
+        if let SymKind::Value{value} = &self.kind {
+            return Some( Rc::clone(value) );
+        }
+        return None;
+    }
+
+    fn new_value(name: &str, value: Rc<Value>) -> Self {
+        SymValue{ name: name.to_string(), kind: SymKind::Value{value: Rc::clone(&value)} }
+    }
+
+    fn new_function(name: &str, node: Rc<Node>) -> Self {
+        SymValue{ name: name.to_string(), kind: SymKind::Function{node: Rc::clone(&node)} }
+    }
+}
+
+#[derive(Debug)]
+struct ScopeSymbolTable {
+    parent: Option<Rc<ScopeSymbolTable>>,
+    symbols: HashMap<String,Rc<SymValue>>,
+}
+
+impl ScopeSymbolTable {
+    pub fn new(parent: Option<Rc<ScopeSymbolTable>>) -> Self {
+        ScopeSymbolTable { parent: parent, symbols: HashMap::new() }
+    }
+    pub fn insert(&mut self, sym: SymValue) {
+        self.symbols.insert( sym.name.to_string(), Rc::new(sym) );
+    }
+
+    pub fn lookup(&self, sym: &String) -> Option<Rc<SymValue>> {
+        if let Some(v) = self.symbols.get(sym) {
+            return Some(Rc::clone(v));
+        }
+
+        if let Some(parent) = &self.parent {
+            return parent.lookup(sym);
+        }
+
+        return None;
+    }
+}
 #[derive(Debug)]
 struct Interpreter {
-    vars: HashMap<String,Value>,
     func: HashMap<String,Rc<Node>>,
+    current_scope: ScopeSymbolTable,
     ast: Vec<Rc<Node>>,
     line: u32,
 }
@@ -447,7 +506,7 @@ fn lexer(express: &str) -> VecDeque<Token> {
 impl Interpreter {
     fn new() -> Self {
         Interpreter { 
-            vars: HashMap::new(), 
+            current_scope: ScopeSymbolTable::new(None), 
             func: HashMap::new(), 
             ast: Vec::new(),
             line: 0,
@@ -474,23 +533,23 @@ impl Interpreter {
         return Ok(());
     }
 
-    fn visit(&mut self, n: &Node) -> Result<Value,String> {
+    fn visit(&mut self, n: &Node) -> Result<Rc<Value>,String> {
         match n {
             Node::BinOp{left, op, right} => { 
                 let a = self.visit(left)?;
                 let b = self.visit(right)?;
                 println!("DEBUG(BinOp) = {:?}, {:?}, op={:?}", a, b, op);
-                let r = match op.as_str() {
-                    "+" => a.plus(&b),
-                    "-" => a.minus(&b),
-                    "/" => a.divide(&b),
-                    "*" => a.multiply(&b),
-                    "%" => a.modulus(&b),
+                let r: Rc<Value> = (match op.as_str() {
+                    "+" => Some(Rc::new(a.plus(&b).unwrap())),
+                    "-" => Some(Rc::new(a.minus(&b).unwrap())),
+                    "/" => Some(Rc::new(a.divide(&b).unwrap())),
+                    "*" => Some(Rc::new(a.multiply(&b).unwrap())),
+                    "%" => Some(Rc::new(a.modulus(&b).unwrap())),
                     "=" => {
-                        let var_value: Option<Value> = match a {
+                        let var_value: Option<Rc<Value>> = match a.as_ref() {
                             Value::String(var_name) =>  {
                                 println!("DEBUG(var table) = {:?}, {:?}", var_name, b);
-                                self.vars.insert(var_name, b.clone());
+                                self.current_scope.insert(SymValue::new_value(&var_name, Rc::clone(&b)));
                                 Some(b)
                             },
                             _ => {
@@ -499,28 +558,26 @@ impl Interpreter {
                         };
                         var_value
                     },
-                    _ => {
-                        None
-                    },
-                }.unwrap();
+                    _ => None,
+                }).unwrap();
                 return Ok(r);
             },
             Node::FunctionDef{name, params, body} => {
                 self.func.insert( name.to_owned(), Rc::clone( body ) );
-                return Ok(Value::None);
+                return Ok(Rc::new(Value::None));
             },
             Node::FunctionCall{name, params} => {},
-            Node::Num{value} => {return Ok(value.to_owned());},
+            Node::Num{value} => {return Ok( Rc::new(value.to_owned()) );},
             Node::Identifier{value} => {
-                let v = self.vars.get(value);
+                let v = self.current_scope.lookup(value);
                 if v.is_some() {
-                    return Ok( v.unwrap().clone() );
+                    return Ok( v.unwrap().get_value().unwrap() );
                 }
-                return Ok( Value::String(value.to_owned()) );
+                return Ok( Rc::new(Value::String(value.to_owned())) );
             },
             _ => {},
         }
-        return Ok(Value::None);
+        return Ok(Rc::new(Value::None));
     }
 }
 
