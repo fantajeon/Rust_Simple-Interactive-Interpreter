@@ -126,11 +126,12 @@ struct Interpreter {
 }
 
 impl Evaluator for Interpreter {
-    fn evaluate(&mut self, ast: &Node) -> Result<(),String> {
+    fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String> {
+        let result = self.visit(ast);
         println!("AST=>>>>{:?}", ast);
-        println!("result(AST)={:?}", self.visit(ast));
+        println!("result(AST)={:?}", result);
         println!("(fn)={:?}", self.func);
-        return Ok(());
+        return result;
     }
 }
 
@@ -152,9 +153,9 @@ impl Interpreter {
 
         let mut parser = Parser::new();
 
-        parser.parse( tokens, self )?;
+        let result = parser.parse( tokens, self )?;
 
-        return Ok(None);
+        return Ok(result);
     }
 
     fn push_stack_frame(&mut self, mut frame: ScopeSymbolTable) {
@@ -246,7 +247,6 @@ impl Interpreter {
                                 }
                             }
 
-                            //params.iter().zip( next_value.iter() )
                             self.push_stack_frame(frame);
                             let ret = self.visit(body)?;
                             self.pop_stack_frame();
@@ -301,7 +301,7 @@ fn test_basic_arithmetic() {
     //i.input("a + b + c + 1");
     i.input("fn avg a b c => a + b + c + 1");
     //i.input("avg a b c");
-    i.input("avg a b avg a b c");
+    println!("output={:?}", i.input("avg a b avg a b c"));
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");

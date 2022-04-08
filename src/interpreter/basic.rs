@@ -86,6 +86,14 @@ impl Value {
         return None;
     }
 
+    pub fn get_result(&self) -> Option<f32> {
+        match self {
+            Value::IntNumber(v) => return Some(*v as f32),
+            Value::FloatNumber(v) => return Some(*v),
+            _ => return None,
+        }
+    }
+
     pub fn plus(&self, b: &Value) -> Option<Value> {
         match (self, b) {
             (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x+y )),

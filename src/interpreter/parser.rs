@@ -46,7 +46,7 @@ impl Node {
 
 
 pub trait Evaluator {
-    fn evaluate(&mut self, ast: &Node) -> Result<(),String>;
+    fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String>;
 }
 
 #[derive(Debug)]
@@ -256,20 +256,26 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self, token: VecDeque<Token>, e: &mut dyn Evaluator) -> Result<Vec<Rc<Node>>,String> 
+    pub fn parse(&mut self, token: VecDeque<Token>, e: &mut dyn Evaluator) -> Result<Option<f32>,String> 
     {
         self.input = token;
         self.shift_input();
         let mut ast: Vec<Rc<Node>> = Vec::new();
+        let mut last_value = None;
         loop {
             if self.curr_token.is_none() {
                 println!("EOF!");
                 break;
             }
             let n = self.stmt()?;
-            e.evaluate(&n);
+            let result = e.evaluate(&n)?;
             ast.push(Rc::new(n));
+            last_value = Some(Rc::clone(&result));
         }
-        return Ok(ast);
+
+        if let Some(r) = last_value {
+            return Ok(r.get_result());
+        }
+        return Err("None".to_string());
     }
 }
