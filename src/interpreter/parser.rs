@@ -22,7 +22,10 @@ pub enum Node {
         op: String,
         right: Box<Node>,
     },
-    Num{ value: Value },
+    Num{ 
+        value: Value,
+        next: Option<Box<Node>>,
+    },
     Identifier{ 
         value: String,
         next: Option<Box<Node>>,
@@ -76,12 +79,14 @@ impl Parser {
 
     fn _function_call_parameter(&mut self) -> Result<Node, String> {
         let mut params: Vec<String> = Vec::new();
-        while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
+        while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
+            || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
+            || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) 
+        {
             let mut ct = self.curr_token.take();
             params.push( ct.kind.take_letter().unwrap() );
             self.shift_input();
         }
-        let num_params = params.len();
 
         let result:Option<Node> = params.into_iter().enumerate().rev()
             .fold(None, |prev: Option<Node>, value| -> Option<Node> {
@@ -139,12 +144,12 @@ impl Parser {
         println!("factor! {:?}", self.curr_token);
         match &*self.curr_token.kind {
             Kind::FloatNumber(v) => {
-                let n = Node::Num { value: Value::FloatNumber(*v) };
+                let n = Node::Num { value: Value::FloatNumber(*v), next: None };
                 self.shift_input();
                 return Ok(n);
             },
             Kind::IntNumber(v) => {
-                let n = Node::Num { value: Value::IntNumber(*v) };
+                let n = Node::Num { value: Value::IntNumber(*v), next: None };
                 self.shift_input();
                 return Ok(n);
             },

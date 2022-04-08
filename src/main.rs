@@ -212,11 +212,14 @@ impl Interpreter {
                         Rc::clone(body) ) );
                 return Ok(Rc::new(Value::None));
             },
-            Node::Num{value} => {return Ok( Rc::new(value.to_owned()) );},
+            Node::Num{value, next} => {
+                // next 값이 있을 경우 tuple 처리를 해야한다.
+                return Ok( Rc::new(value.to_owned()) );
+            },
             Node::Identifier{value, next} => {
                 let v = self.current_scope.lookup(value);
                 if v.is_none() {
-                    println!("Symbol Table: {:?}", self.current_scope);
+                    //println!("Symbol Table: {:?}", self.current_scope);
                     return Err("Cannot resolve symbol".to_string());
                 }
                 let next_value = if let Some(n) = next {
@@ -292,13 +295,14 @@ impl Default for Interpreter {
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     //i.input("y");
-    i.input("a = 1");
+    //i.input("a = 1");
     //i.input("b = 10");
     //i.input("c = 100");
     //i.input("a + 1 + b");
     //i.input("a + b + c + 1");
     //i.input("fn avg a b c => a + b + c + 1");
     //i.input("avg a b c");
+    i.input("avg 1 b 2.0");
     //println!("output={:?}", i.input("avg a b avg a b c"));
     //i.input(".1 + 1");
     //i.input("2 - 1");
