@@ -130,40 +130,6 @@ impl Value {
 }
 
 #[derive(Debug)]
-pub enum Node {
-    None,
-    FunctionDef{ 
-        name: String, 
-        params: Vec<Node>,
-        body: Rc<Node>,
-    },
-    FunctionCall {
-        name: String, 
-        params: Vec<Node>,
-    },
-    Assign {
-        left: Box<Node>, 
-        right: Box<Node>,
-    },
-    BinOp{ 
-        left: Box<Node>, 
-        op: String,
-        right: Box<Node>,
-    },
-    Num{ value: Value },
-    Identifier{ value: String },
-}
-
-impl Node {
-    pub fn identity_value(self) -> Option<String> {
-        match self {
-            Node::Identifier { value } => Some(value),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct Token {
     pub kind: Box<Kind>,
     pub value: Value,

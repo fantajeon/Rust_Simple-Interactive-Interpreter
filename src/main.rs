@@ -1,5 +1,5 @@
 mod interpreter;
-use std::{collections::{HashMap}, rc::Rc};
+use std::{collections::{HashMap}, rc::Rc, cell::RefCell};
 
 use interpreter::*;
 
@@ -28,15 +28,15 @@ digit           ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 */
 
 #[derive(Debug)]
-enum SymKind {
+pub enum SymKind {
     Value{value: Rc<Value>},
     Function{
-        node: Rc<Node>,
+        body: Rc<Node>,
         params: Vec<String>,
     },
 }
 #[derive(Debug)]
- struct SymValue {
+ pub struct SymValue {
     name: String,
     kind: SymKind,
 }
@@ -62,7 +62,7 @@ impl SymValue {
             name: name.to_string(), 
             kind: SymKind::Function{
                 params: params,
-                node: Rc::clone(&node)
+                body: Rc::clone(&node)
             } 
         }
     }
@@ -70,14 +70,20 @@ impl SymValue {
 
 #[derive(Debug)]
 struct ScopeSymbolTable {
-    parent: Option<Rc<ScopeSymbolTable>>,
-    symbols: HashMap<String,Rc<SymValue>>,
+    pub parent: Option<Box<ScopeSymbolTable>>,
+    pub symbols: HashMap<String,Rc<SymValue>>,
 }
 
 impl ScopeSymbolTable {
-    pub fn new(parent: Option<Rc<ScopeSymbolTable>>) -> Self {
+    pub fn new(parent: Option<Box<ScopeSymbolTable>>) -> Self {
         ScopeSymbolTable { parent: parent, symbols: HashMap::new() }
     }
+
+    pub fn take_parent(&mut self) -> Option<Box<ScopeSymbolTable>> {
+        let old = std::mem::replace(&mut self.parent, None);
+        return old;
+    }
+
     pub fn insert(&mut self, sym: SymValue) {
         self.symbols.insert( sym.name.to_string(), Rc::new(sym) );
     }
@@ -97,7 +103,7 @@ impl ScopeSymbolTable {
 #[derive(Debug)]
 struct Interpreter {
     func: HashMap<String,Rc<Node>>,
-    current_scope: ScopeSymbolTable,
+    current_scope: Box<ScopeSymbolTable>,
     //ast: Vec<Rc<Node>>,
     line: u32,
 }
@@ -114,7 +120,7 @@ impl Evaluator for Interpreter {
 impl Interpreter {
     fn new() -> Self {
         Interpreter { 
-            current_scope: ScopeSymbolTable::new(None), 
+            current_scope: Box::new(ScopeSymbolTable::new(None)),
             func: HashMap::new(), 
             //ast: Vec::new(),
             line: 0,
@@ -134,7 +140,16 @@ impl Interpreter {
         return Ok(None);
     }
 
+    fn push_stack_frame(&mut self, mut frame: ScopeSymbolTable) {
+        let parent = std::mem::replace( &mut self.current_scope, Box::new(frame) );
+        self.current_scope.parent = Some(parent);
+    }
 
+    fn pop_stack_frame(&mut self) {
+        if let Some(parent) = self.current_scope.take_parent() {
+            std::mem::replace( &mut self.current_scope, parent);
+        }
+    }
 
     fn visit(&mut self, n: &Node) -> Result<Rc<Value>,String> {
         match n {
@@ -144,12 +159,15 @@ impl Interpreter {
                 let var_value: Option<Rc<Value>> = match a.as_ref() {
                     Value::String(var_name) =>  {
                         println!("DEBUG(var table) = {:?}, {:?}", var_name, b);
-                        self.current_scope.insert(SymValue::new_value(&var_name, Rc::clone(&b)));
+                        self.current_scope.insert(
+                                SymValue::new_value(
+                                    &var_name, 
+                                    Rc::clone(&b)
+                                )
+                            );
                         Some(b)
                     },
-                    _ => {
-                        None
-                    }
+                    _ => None
                 };
                 return Ok(var_value.unwrap());
             },
@@ -168,9 +186,10 @@ impl Interpreter {
                 return Ok(r);
             },
             Node::FunctionDef{name, params, body} => {
+                println!("create function: {} with {:?}", name, params);
                 //self.func.insert( name.to_owned(), Rc::clone( body ) );
                 let params: Vec<String> = params.iter().filter_map( |t| {
-                    if let Node::Identifier{value} = t {
+                    if let Node::Identifier{value, ..} = t {
                         return Some(value.to_string());
                     }
                     None
@@ -181,14 +200,25 @@ impl Interpreter {
                         Rc::clone(body) ) );
                 return Ok(Rc::new(Value::None));
             },
-            Node::FunctionCall{name, params} => {
-
-            },
             Node::Num{value} => {return Ok( Rc::new(value.to_owned()) );},
-            Node::Identifier{value} => {
+            Node::Identifier{value, next} => {
                 let v = self.current_scope.lookup(value);
-                if v.is_some() {
-                    return Ok( Rc::clone(&v.unwrap().get_value().unwrap()) );
+                if let Some(symval) = v {
+                    match &symval.kind {
+                        SymKind::Function { body, params } => {
+                            let frame = ScopeSymbolTable::new(None);
+                            //frame.insert(SymValue);
+                            
+                            println!("!!!!! call function: {:?}", symval);
+                            self.push_stack_frame(frame);
+                            let ret = self.visit(body)?;
+                            self.pop_stack_frame();
+                            return Ok( ret );
+                        },
+                        SymKind::Value { value } => {
+                            return Ok( Rc::clone(value) );
+                        }
+                    }
                 }
                 return Ok( Rc::new(Value::String(value.to_owned())) );
             },
@@ -208,11 +238,12 @@ impl Default for Interpreter {
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     i.input("a = 1");
-    //i.input("b = 10");
+    i.input("b = 10");
+    i.input("c = 100");
     //i.input("a + 1 + b");
     //i.input("a + b + c + 1");
-    //i.input("fn avg a b c => a + b + c + 1");
-    //i.input("avg a b c");
+    i.input("fn avg a b c => a + b + c + 1");
+    i.input("avg a b c");
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");

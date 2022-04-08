@@ -1,6 +1,55 @@
 use std::{collections::VecDeque, rc::Rc};
 
+use crate::SymValue;
+
 use super::basic::*;
+
+
+#[derive(Debug)]
+pub enum Node {
+    None,
+    FunctionDef{ 
+        name: String, 
+        params: Vec<Node>,
+        body: Rc<Node>,
+    },
+    IdentifierSeq {
+        seq: usize,
+        len: usize,
+        curr: Box<Node>,
+        next: Box<Node>,
+    },
+    Assign {
+        left: Box<Node>, 
+        right: Box<Node>,
+    },
+    BinOp{ 
+        left: Box<Node>, 
+        op: String,
+        right: Box<Node>,
+    },
+    Num{ value: Value },
+    Identifier{ 
+        value: String,
+        next: Option<Box<Node>>,
+     },
+}
+
+impl Node {
+    pub fn identity_value(self) -> Option<String> {
+        match self {
+            Node::Identifier { value, next } => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn set_next_identity(&mut self, next_value: Node) {
+        if let Node::Identifier { value, next } = self {
+            std::mem::replace(next,Some(Box::new(next_value)));
+        }
+    }
+}
+
 
 pub trait Evaluator {
     fn evaluate(&mut self, ast: &Node) -> Result<(),String>;
@@ -31,12 +80,45 @@ impl Parser {
         return std::mem::replace( &mut self.curr_token, new);
     }
 
-    fn _function_parameter(&mut self) -> Result<Vec<Node>, String> {
+    fn _function_call_parameter(&mut self) -> Result<Node, String> {
+        let mut params: Vec<Node> = Vec::new();
+        while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
+            let mut ct = self.curr_token.take();
+            params.push(Node::Identifier { 
+                value: ct.kind.take_letter().unwrap(),
+                next: None,
+            });
+            self.shift_input();
+        }
+        let num_params = params.len();
+
+        let result:Option<Node> = params.into_iter().enumerate().rev()
+            .fold(None, |prev: Option<Node>, value| -> Option<Node> {
+                    if let Some(nn) = prev {
+                        return Some(Node::IdentifierSeq { 
+                                seq: value.0, 
+                                len: num_params,
+                                curr: Box::new(value.1), 
+                                next: Box::new(nn) 
+                            });
+                    } 
+                    return Some(Node::IdentifierSeq { 
+                            seq: value.0, 
+                            len: 0,
+                            curr: Box::new(value.1), 
+                            next: Box::new(Node::None), 
+                        });
+                });
+        return Ok(result.unwrap_or(Node::None));
+    }
+
+    fn _function_def_parameter(&mut self) -> Result<Vec<Node>, String> {
         let mut result: Vec<Node> = Vec::new();
         while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
             let mut ct = self.curr_token.take();
             result.push(Node::Identifier { 
                 value: ct.kind.take_letter().unwrap(),
+                next: None,
             });
             self.shift_input();
         }
@@ -51,14 +133,14 @@ impl Parser {
         return Err("Syntax Error! function Expression".to_string());
     }
 
-    fn _function(&mut self) -> Result<Node,String> {
+    fn _function_def(&mut self) -> Result<Node,String> {
         if let Kind::Letter(fn_name) = &*self.curr_token.kind {
             println!("fn-name: {}", fn_name);
             let mut ct = self.curr_token.take();
             self.shift_input();
             let result = Node::FunctionDef { 
                 name: (*ct.kind).take_letter().unwrap(), 
-                params: self._function_parameter()?, 
+                params: self._function_def_parameter()?, 
                 body: Rc::new(self._function_expression()?), 
             };
             return Ok(result);
@@ -80,7 +162,7 @@ impl Parser {
                 return Ok(n);
             },
             Kind::Letter(var) => {
-                let n = Node::Identifier { value: var.clone() };
+                let n = Node::Identifier { value: var.clone(), next: None };
                 self.shift_input();
                 let mut ct = self.curr_token.take();
                 if let Kind::Op(v) = &*ct.kind {
@@ -164,7 +246,7 @@ impl Parser {
             }
         } else {
             if self.curr_token.is_letter() {
-                result = Node::FunctionCall { name: result.identity_value().unwrap(), params: self._function_parameter()? }
+                result.set_next_identity( self._function_call_parameter()? );
             }
         }
         return Ok(result);
@@ -179,7 +261,7 @@ impl Parser {
                     return Err("syntax error!".to_string());
                 } 
                 self.shift_input();
-                return self._function();
+                return self._function_def();
             },
             _ => {
                 return self._expression();
