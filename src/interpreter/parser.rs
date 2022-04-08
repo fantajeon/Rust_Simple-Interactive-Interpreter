@@ -30,9 +30,9 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn identity_value(self) -> Option<String> {
+    pub fn identity_value(&self) -> Option<&String> {
         match self {
-            Node::Identifier { value, next } => Some(value),
+            Node::Identifier { value, .. } => Some(value),
             _ => None,
         }
     }

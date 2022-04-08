@@ -172,22 +172,16 @@ impl Interpreter {
     fn visit(&mut self, n: &Node) -> Result<Rc<Value>,String> {
         match n {
             Node::Assign{left, right} => {
-                let a = self.visit(left)?;
+                let var_name =left.identity_value().unwrap();
                 let b = self.visit(right)?;
-                let var_value: Option<Rc<Value>> = match a.as_ref() {
-                    Value::String(var_name) =>  {
-                        println!("DEBUG(var table) = {:?}, {:?}", var_name, b);
-                        self.current_scope.insert(
-                                SymValue::new_value(
-                                    &var_name, 
-                                    Rc::clone(&b)
-                                )
-                            );
-                        Some(b)
-                    },
-                    _ => None
-                };
-                return Ok(var_value.unwrap());
+                println!("DEBUG(var table) = {:?}, {:?}", var_name, b);
+                self.current_scope.insert(
+                        SymValue::new_value(
+                            &var_name, 
+                            Rc::clone(&b)
+                        )
+                    );
+                return Ok(b);
             },
             Node::BinOp{left, op, right} => { 
                 let a = self.visit(left)?;
@@ -221,61 +215,64 @@ impl Interpreter {
             Node::Num{value} => {return Ok( Rc::new(value.to_owned()) );},
             Node::Identifier{value, next} => {
                 let v = self.current_scope.lookup(value);
+                if v.is_none() {
+                    println!("Symbol Table: {:?}", self.current_scope);
+                    return Err("Cannot resolve symbol".to_string());
+                }
                 let next_value = if let Some(n) = next {
                         Some(self.visit(n)?)
                     } else {
                         None
                     };
-                if let Some(symval) = v {
-                    match &symval.kind_value {
-                        SimKindValue::Function { body, params } => {
-                            let mut frame = ScopeSymbolTable::new(None);
-                            //frame.insert(SymValue);
-                            
-                            println!("!!!!! call function: {:?}, params={:?}", symval, next_value);
-                            if let Some(v) = next_value {
-                                match &*v {
-                                    Value::Tuple(ref v) => {
-                                        for p in params.iter().zip(v.iter()) {
-                                            let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
-                                            frame.insert( sym );
-                                        }
-                                    },
-                                    _ => {
+                let symval = v.unwrap();
+                match &symval.kind_value {
+                    SimKindValue::Function { body, params } => {
+                        let mut frame = ScopeSymbolTable::new(None);
+                        //frame.insert(SymValue);
+                        
+                        println!("!!!!! call function: {:?}, params={:?}", symval, next_value);
+                        if let Some(v) = next_value {
+                            match &*v {
+                                Value::Tuple(ref v) => {
+                                    for p in params.iter().zip(v.iter()) {
+                                        let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
+                                        frame.insert( sym );
+                                    }
+                                },
+                                _ => {
 
-                                    },
-                                }
+                                },
+                            }
+                        }
+
+                        self.push_stack_frame(frame);
+                        let ret = self.visit(body)?;
+                        self.pop_stack_frame();
+                        return Ok( ret );
+                    },
+                    SimKindValue::Tuple { value } => {
+                        if let Some(_) = next_value {
+                            return Err("Impossible Tuple value".to_string());
+                        }
+                        return Ok( Rc::clone(&value) );
+                    },
+                    SimKindValue::Value { value } => {
+                        if let Some(n) = next_value {
+                            // Array Parameter
+                            let mut varr: VecDeque<Rc<Value>> = VecDeque::new();
+                            varr.push_back(Rc::clone(value));
+                            if let Value::Tuple(varr_next) = &*n {
+                                varr.extend( varr_next.iter().map(Rc::clone) );
+                            } else {
+                                varr.push_back(Rc::clone(&n));
                             }
 
-                            self.push_stack_frame(frame);
-                            let ret = self.visit(body)?;
-                            self.pop_stack_frame();
-                            return Ok( ret );
-                        },
-                        SimKindValue::Tuple { value } => {
-                            if let Some(_) = next_value {
-                                return Err("Impossible Tuple value".to_string());
-                            }
-                            return Ok( Rc::clone(&value) );
-                        },
-                        SimKindValue::Value { value } => {
-                            if let Some(n) = next_value {
-                                // Array Parameter
-                                let mut varr: VecDeque<Rc<Value>> = VecDeque::new();
-                                varr.push_back(Rc::clone(value));
-                                if let Value::Tuple(varr_next) = &*n {
-                                    varr.extend( varr_next.iter().map(Rc::clone) );
-                                } else {
-                                    varr.push_back(Rc::clone(&n));
-                                }
-
-                                println!("Building Tuple: {:?} @ symval {:?}", varr, symval);
-                                return Ok( Rc::new( Value::Tuple(varr) ) );
-                            }
-                            return Ok( Rc::clone(value) );
-                        },
-                        _ => {},
-                    }
+                            println!("Building Tuple: {:?} @ symval {:?}", varr, symval);
+                            return Ok( Rc::new( Value::Tuple(varr) ) );
+                        }
+                        return Ok( Rc::clone(value) );
+                    },
+                    _ => {},
                 }
                 return Ok( Rc::new(Value::String(value.to_owned())) );
             },
@@ -294,14 +291,15 @@ impl Default for Interpreter {
 #[test]
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
+    //i.input("y");
     i.input("a = 1");
-    i.input("b = 10");
-    i.input("c = 100");
+    //i.input("b = 10");
+    //i.input("c = 100");
     //i.input("a + 1 + b");
     //i.input("a + b + c + 1");
-    i.input("fn avg a b c => a + b + c + 1");
+    //i.input("fn avg a b c => a + b + c + 1");
     //i.input("avg a b c");
-    println!("output={:?}", i.input("avg a b avg a b c"));
+    //println!("output={:?}", i.input("avg a b avg a b c"));
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");

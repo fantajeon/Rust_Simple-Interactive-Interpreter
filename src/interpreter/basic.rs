@@ -136,10 +136,10 @@ impl Value {
 
     pub fn minus(&self, b: &Value) -> Option<Value> {
         match (self, b) {
-            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x+y )),
-            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x+(*y as f32) )),
-            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x+y )),
-            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)+y )),
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x-y )),
+            (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x-(*y as f32) )),
+            (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x-y )),
+            (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)-y )),
             _ => None,
         }
     }
