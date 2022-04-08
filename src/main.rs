@@ -1,5 +1,5 @@
 mod interpreter;
-use std::{collections::{HashMap}, rc::Rc, cell::RefCell};
+use std::{collections::{HashMap, VecDeque}, rc::Rc};
 
 use interpreter::*;
 
@@ -28,8 +28,14 @@ digit           ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 */
 
 #[derive(Debug)]
-pub enum SymKind {
-    Value{value: Rc<Value>},
+pub enum SimKindValue {
+    None,
+    Value{
+        value: Rc<Value>,
+    },
+    Tuple{
+        value: Rc<Value>,
+    },
     Function{
         body: Rc<Node>,
         params: Vec<String>,
@@ -38,31 +44,42 @@ pub enum SymKind {
 #[derive(Debug)]
  pub struct SymValue {
     name: String,
-    kind: SymKind,
+    kind_value: SimKindValue,
 }
 
 impl SymValue {
-    fn get_name(&self) -> &String {
+    pub fn get_name(&self) -> &String {
         return &self.name;
     }
+
+    pub fn get_tuple(&self) -> Option<Rc<Value>> {
+        if let SimKindValue::Tuple{value} = &self.kind_value {
+            return Some( Rc::clone(value) );
+        }
+        return None;
+    }
     
-    fn get_value(&self) -> Option<Rc<Value>> {
-        if let SymKind::Value{value} = &self.kind {
+    pub fn get_value(&self) -> Option<Rc<Value>> {
+        if let SimKindValue::Value{value} = &self.kind_value {
             return Some( Rc::clone(value) );
         }
         return None;
     }
 
-    fn new_value(name: &str, value: Rc<Value>) -> Self {
-        SymValue{ name: name.to_string(), kind: SymKind::Value{value: Rc::clone(&value)} }
+    pub fn new_tuple(name: &str, value: Rc<Value>) -> Self {
+        SymValue{ name: name.to_string(), kind_value: SimKindValue::Tuple { value: value }}
     }
 
-    fn new_function(name: &str, params: Vec<String>, node: Rc<Node>) -> Self {
+    pub fn new_value(name: &str, value: Rc<Value>) -> Self {
+        SymValue{ name: name.to_string(), kind_value: SimKindValue::Value{value: value} }
+    }
+
+    pub fn new_function(name: &str, params: Vec<String>, node: Rc<Node>) -> Self {
         SymValue{ 
             name: name.to_string(), 
-            kind: SymKind::Function{
+            kind_value: SimKindValue::Function{
                 params: params,
-                body: Rc::clone(&node)
+                body: node
             } 
         }
     }
@@ -102,10 +119,10 @@ impl ScopeSymbolTable {
 }
 #[derive(Debug)]
 struct Interpreter {
-    func: HashMap<String,Rc<Node>>,
-    current_scope: Box<ScopeSymbolTable>,
+    pub func: HashMap<String,Rc<Node>>,
+    pub current_scope: Box<ScopeSymbolTable>,
     //ast: Vec<Rc<Node>>,
-    line: u32,
+    pub line: u32,
 }
 
 impl Evaluator for Interpreter {
@@ -118,7 +135,7 @@ impl Evaluator for Interpreter {
 }
 
 impl Interpreter {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Interpreter { 
             current_scope: Box::new(ScopeSymbolTable::new(None)),
             func: HashMap::new(), 
@@ -127,7 +144,7 @@ impl Interpreter {
         }
     }
 
-    fn input(&mut self, input: &str) -> Result<Option<f32>, String> {
+    pub fn input(&mut self, input: &str) -> Result<Option<f32>, String> {
         self.line += 1;
         println!("tokenizing={} @ line{}", input, self.line);
         let tokens = lexer(input);
@@ -147,7 +164,7 @@ impl Interpreter {
 
     fn pop_stack_frame(&mut self) {
         if let Some(parent) = self.current_scope.take_parent() {
-            std::mem::replace( &mut self.current_scope, parent);
+            self.current_scope=parent;
         }
     }
 
@@ -203,21 +220,61 @@ impl Interpreter {
             Node::Num{value} => {return Ok( Rc::new(value.to_owned()) );},
             Node::Identifier{value, next} => {
                 let v = self.current_scope.lookup(value);
+                let next_value = if let Some(n) = next {
+                        Some(self.visit(n)?)
+                    } else {
+                        None
+                    };
                 if let Some(symval) = v {
-                    match &symval.kind {
-                        SymKind::Function { body, params } => {
-                            let frame = ScopeSymbolTable::new(None);
+                    match &symval.kind_value {
+                        SimKindValue::Function { body, params } => {
+                            let mut frame = ScopeSymbolTable::new(None);
                             //frame.insert(SymValue);
                             
-                            println!("!!!!! call function: {:?}", symval);
+                            println!("!!!!! call function: {:?}, params={:?}", symval, next_value);
+                            if let Some(v) = next_value {
+                                match &*v {
+                                    Value::Tuple(ref v) => {
+                                        for p in params.iter().zip(v.iter()) {
+                                            let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
+                                            frame.insert( sym );
+                                        }
+                                    },
+                                    _ => {
+
+                                    },
+                                }
+                            }
+
+                            //params.iter().zip( next_value.iter() )
                             self.push_stack_frame(frame);
                             let ret = self.visit(body)?;
                             self.pop_stack_frame();
                             return Ok( ret );
                         },
-                        SymKind::Value { value } => {
+                        SimKindValue::Tuple { value } => {
+                            if let Some(_) = next_value {
+                                return Err("Impossible Tuple value".to_string());
+                            }
+                            return Ok( Rc::clone(&value) );
+                        },
+                        SimKindValue::Value { value } => {
+                            if let Some(n) = next_value {
+                                // Array Parameter
+                                let mut varr: VecDeque<Rc<Value>> = VecDeque::new();
+                                varr.push_back(Rc::clone(value));
+                                if let Value::Tuple(varr_next) = &*n {
+                                    varr.extend( varr_next.iter().map(Rc::clone) );
+                                } else {
+                                    varr.push_back(Rc::clone(&n));
+                                }
+
+                                println!("Building Tuple: {:?} @ symval {:?}", varr, symval);
+                                return Ok( Rc::new( Value::Tuple(varr) ) );
+                            }
                             return Ok( Rc::clone(value) );
-                        }
+                        },
+                        _ => {},
                     }
                 }
                 return Ok( Rc::new(Value::String(value.to_owned())) );
@@ -243,7 +300,8 @@ fn test_basic_arithmetic() {
     //i.input("a + 1 + b");
     //i.input("a + b + c + 1");
     i.input("fn avg a b c => a + b + c + 1");
-    i.input("avg a b c");
+    //i.input("avg a b c");
+    i.input("avg a b avg a b c");
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");

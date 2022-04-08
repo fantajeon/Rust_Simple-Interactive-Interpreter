@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, collections::{VecDeque, binary_heap::Iter}};
 
 macro_rules! is_enum_variant {
     ($v:expr, $p:pat) => (
@@ -54,6 +54,7 @@ impl Kind {
 #[derive(Debug, Clone)]
 pub enum Value {
     None,
+    Tuple(VecDeque<Rc<Value>>),
     IntNumber(i32),
     FloatNumber(f32),
     String(String),
@@ -78,6 +79,13 @@ impl From<i32> for Value {
 }
 
 impl Value {
+    pub fn get_tuple(&mut self) -> Option<&mut VecDeque<Rc<Value>>> {
+        if let Value::Tuple(v) = self {
+            return Some(v);
+        }
+        return None;
+    }
+
     pub fn plus(&self, b: &Value) -> Option<Value> {
         match (self, b) {
             (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x+y )),

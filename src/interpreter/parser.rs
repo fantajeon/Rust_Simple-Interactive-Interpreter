@@ -13,12 +13,6 @@ pub enum Node {
         params: Vec<Node>,
         body: Rc<Node>,
     },
-    IdentifierSeq {
-        seq: usize,
-        len: usize,
-        curr: Box<Node>,
-        next: Box<Node>,
-    },
     Assign {
         left: Box<Node>, 
         right: Box<Node>,
@@ -44,8 +38,8 @@ impl Node {
     }
 
     pub fn set_next_identity(&mut self, next_value: Node) {
-        if let Node::Identifier { value, next } = self {
-            std::mem::replace(next,Some(Box::new(next_value)));
+        if let Node::Identifier { ref mut next, .. } = self {
+            *next = Some(Box::new(next_value));
         }
     }
 }
@@ -81,13 +75,10 @@ impl Parser {
     }
 
     fn _function_call_parameter(&mut self) -> Result<Node, String> {
-        let mut params: Vec<Node> = Vec::new();
+        let mut params: Vec<String> = Vec::new();
         while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
             let mut ct = self.curr_token.take();
-            params.push(Node::Identifier { 
-                value: ct.kind.take_letter().unwrap(),
-                next: None,
-            });
+            params.push( ct.kind.take_letter().unwrap() );
             self.shift_input();
         }
         let num_params = params.len();
@@ -95,18 +86,14 @@ impl Parser {
         let result:Option<Node> = params.into_iter().enumerate().rev()
             .fold(None, |prev: Option<Node>, value| -> Option<Node> {
                     if let Some(nn) = prev {
-                        return Some(Node::IdentifierSeq { 
-                                seq: value.0, 
-                                len: num_params,
-                                curr: Box::new(value.1), 
-                                next: Box::new(nn) 
+                        return Some(Node::Identifier { 
+                                value: value.1, 
+                                next: Some(Box::new(nn)), 
                             });
                     } 
-                    return Some(Node::IdentifierSeq { 
-                            seq: value.0, 
-                            len: 0,
-                            curr: Box::new(value.1), 
-                            next: Box::new(Node::None), 
+                    return Some(Node::Identifier { 
+                            value: value.1, 
+                            next: None,
                         });
                 });
         return Ok(result.unwrap_or(Node::None));
