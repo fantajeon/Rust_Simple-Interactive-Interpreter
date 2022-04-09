@@ -8,6 +8,7 @@ This program is built by Rust to practice myself.
 
 
 # Rules
+<pre>
 function        ::= fn-keyword fn-name { identifier } fn-operator expression
 fn-name         ::= identifier
 fn-operator     ::= '=>'
@@ -27,6 +28,7 @@ number          ::= { digit } [ '.' digit { digit } ]
 
 letter          ::= 'a' | 'b' | ... | 'y' | 'z' | 'A' | 'B' | ... | 'Y' | 'Z'
 digit           ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
+</pre>
 
 ## Micellicious Rules
 Please visit at this Kata: https://www.codewars.com/kata/52ffcfa4aff455b3c2000750 
