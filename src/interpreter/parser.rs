@@ -1,6 +1,5 @@
+use std::collections::HashSet;
 use std::{collections::VecDeque, rc::Rc};
-
-use crate::SymValue;
 
 use super::basic::*;
 
@@ -33,6 +32,10 @@ pub enum Node {
 }
 
 impl Node {
+    pub fn is_identifier(&self) -> bool {
+        return is_enum_variant!(self, Node::Identifier{..});
+    }
+
     pub fn identity_value(&self) -> Option<&String> {
         match self {
             Node::Identifier { value, .. } => Some(value),
@@ -73,7 +76,6 @@ impl Parser {
 
     fn shift_input(&mut self) -> Token {
         let new = self.input.pop_front().unwrap_or(Token::default());
-        println!("new_token! {:?}", new);
         return std::mem::replace( &mut self.curr_token, new);
     }
 
@@ -102,16 +104,22 @@ impl Parser {
                     };
                     return Some(node);
                 });
-        println!("___function_call_parameter: {:?}", result);
         return Ok(result.unwrap_or(Node::None));
     }
 
     fn _function_def_parameter(&mut self) -> Result<Vec<Node>, String> {
         let mut result: Vec<Node> = Vec::new();
+        let mut params_set: HashSet<String> = HashSet::new();
         while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
             let mut ct = self.curr_token.take();
+            let param_name = ct.kind.take_letter().unwrap();
+
+            if params_set.get(&param_name).is_some() {
+                return Err(format!("parameter name is duplicated! {}", param_name));
+            }
+            params_set.insert( param_name.to_string() );
             result.push(Node::Identifier { 
-                value: ct.kind.take_letter().unwrap(),
+                value: param_name,
                 next: None,
             });
             self.shift_input();
@@ -128,8 +136,7 @@ impl Parser {
     }
 
     fn _function_def(&mut self) -> Result<Node,String> {
-        if let Kind::Letter(fn_name) = &*self.curr_token.kind {
-            println!("fn-name: {}", fn_name);
+        if let Kind::Letter(_) = &*self.curr_token.kind {
             let mut ct = self.curr_token.take();
             self.shift_input();
             let result = Node::FunctionDef { 
@@ -143,7 +150,6 @@ impl Parser {
     }
 
     fn _factor(&mut self) -> Result<Node,String> {
-        println!("factor! {:?}", self.curr_token);
         match &*self.curr_token.kind {
             Kind::FloatNumber(v) => {
                 let n = Node::Num { value: Value::FloatNumber(*v), next: None };
@@ -185,72 +191,78 @@ impl Parser {
             },
             _ => { },
         }
-        println!("Factor Error!");
         return Err("Unknown Rules!".to_string());
     }
 
     fn _term(&mut self) -> Result<Node,String> {
-        println!("term! {:?}", self.curr_token);
-        let result = self._factor()?;
-        if let Some(mut tok) = self.curr_token.take_if(|v| v.kind.is_op()) {
-            let v = tok.kind.op().unwrap();
-            if v == "*" || v == "/" || v == "%" {
-                self.shift_input();
-                let right = self._term()?;
-                let n = Node::BinOp { 
-                    left: Box::new(result), 
-                    op: tok.kind.take_op().unwrap(),
-                    right: Box::new(right),
-                };
-                return Ok(n);
+        let mut result = self._factor()?;
+
+        loop {
+            if let Some(mut tok) = self.curr_token.take_if(|v| v.kind.is_op()) {
+                let v = tok.kind.op().unwrap();
+                if v == "*" || v == "/" || v == "%" {
+                    self.shift_input();
+                    let right = self._factor()?;
+                    result = Node::BinOp { 
+                        left: Box::new(result),
+                        op: tok.kind.take_op().unwrap(),
+                        right: Box::new(right),
+                    };
+                } else {
+                    self.curr_token.replace(tok);
+                    break;
+                }
             } else {
-                self.curr_token.replace(tok);
+                break;
             }
         }
         return Ok(result);
     }
 
     fn _expression(&mut self) -> Result<Node,String> {
-        println!("expression entry");
         let mut result = self._term()?;
 
-        println!("expression, curr_token={:?}", self.curr_token);
-        if let Some(mut tok) = self.curr_token.take_if(|t| 
-            is_enum_variant!(*t.kind, Kind::ASSIGN)
-        ) {
-            self.shift_input();
-            result = Node::Assign { 
-                left: Box::new(result), 
-                right: Box::new(self._expression()?), 
-            };
-        } else if let Some(mut tok) = self.curr_token.take_if(|t| 
-            is_enum_variant!(*t.kind, Kind::Op(_))
-        ) {
-            println!("BinOps: {:?}", tok);
-            let v = (*tok.kind).op().unwrap();
-            if v == "+" || v == "-" {
+        loop {
+            if let Some(_) = self.curr_token.take_if(|t| 
+                is_enum_variant!(*t.kind, Kind::ASSIGN)
+            ) {
                 self.shift_input();
-                result = Node::BinOp { 
+                result = Node::Assign { 
                     left: Box::new(result), 
-                    op: tok.kind.take_op().unwrap(),
                     right: Box::new(self._expression()?), 
                 };
+            } else if let Some(mut tok) = self.curr_token.take_if(|t| 
+                is_enum_variant!(*t.kind, Kind::Op(_))
+            ) {
+                let v = (*tok.kind).op().unwrap();
+                if v == "+" || v == "-" {
+                    self.shift_input();
+                    result = Node::BinOp { 
+                        left: Box::new(result), 
+                        op: tok.kind.take_op().unwrap(),
+                        right: Box::new(self._term()?), 
+                    };
+                } else {
+                    self.curr_token.replace(tok);
+                    break;
+                }
             } else {
-                self.curr_token.replace(tok);
-            }
-        } else {
-            if self.curr_token.is_letter() || self.curr_token.is_numbers() {
-                result.set_next_identity( self._function_call_parameter()? );
+                if self.curr_token.is_letter() || self.curr_token.is_numbers() {
+                    if !result.is_identifier() {
+                        return Err("Syntax Error".to_string());
+                    }
+                    result.set_next_identity( self._function_call_parameter()? );
+                } else {
+                    break;
+                }
             }
         }
         return Ok(result);
     }
 
     fn stmt(&mut self) -> Result<Node,String> {
-        println!("start stmt with curr_token: {:?}, input={:?}", self.curr_token, self.input);
         match &*self.curr_token.kind {
             Kind::Keyword(v) => {
-                println!("keyword={}", v);
                 if v != "fn" {
                     return Err("syntax error!".to_string());
                 } 
@@ -271,13 +283,16 @@ impl Parser {
         let mut last_value = None;
         loop {
             if self.curr_token.is_none() {
-                println!("EOF!");
                 break;
             }
             let n = self.stmt()?;
             let result = e.evaluate(&n)?;
             ast.push(Rc::new(n));
             last_value = Some(Rc::clone(&result));
+        }
+
+        if ast.len() > 1 {
+            return Err("Syntax Error".to_string());
         }
 
         if let Some(r) = last_value {

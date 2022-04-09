@@ -17,14 +17,12 @@ pub fn lexer(express: &str) -> VecDeque<Token> {
         ").unwrap();
     let mut toks: VecDeque<Token> = VecDeque::new();
     for cap in re.captures_iter(express) {
-        //println!("cap={:?}", cap);
         let tok = re.capture_names()
             .flatten()
             .filter_map(|n| {
                 return Some((n,cap.name(n)?.as_str().to_string()));
             })
             .take(1).next().unwrap();
-        //println!("tok={:?}", tok);
         let t: Option<Token> = match tok.0 {
             "int" => Some( Token::new( Kind::IntNumber(tok.1.parse::<i32>().unwrap())) ),
             "float" => Some( Token::new( Kind::FloatNumber(tok.1.parse::<f32>().unwrap())) ),

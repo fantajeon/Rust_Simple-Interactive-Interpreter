@@ -1,4 +1,4 @@
-use std::{rc::Rc, collections::{VecDeque, binary_heap::Iter}};
+use std::{rc::Rc, collections::{VecDeque}};
 
 macro_rules! is_enum_variant {
     ($v:expr, $p:pat) => (
@@ -97,13 +97,6 @@ impl From<i32> for Value {
 }
 
 impl Value {
-    pub fn get_tuple(&mut self) -> Option<&mut VecDeque<Rc<Value>>> {
-        if let Value::Tuple(v) = self {
-            return Some(v);
-        }
-        return None;
-    }
-
     pub fn get_result(&self) -> Option<f32> {
         match self {
             Value::IntNumber(v) => return Some(*v as f32),
@@ -144,7 +137,7 @@ impl Value {
 
     pub fn divide(&self, b: &Value) -> Option<Value> {
         match (self, b) {
-            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::IntNumber( x/y )),
+            (Value::IntNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( (*x as f32)/(*y as f32) )),
             (Value::FloatNumber(x), Value::IntNumber(y)) => Some(Value::FloatNumber( x/(*y as f32) )),
             (Value::FloatNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( x/y )),
             (Value::IntNumber(x), Value::FloatNumber(y)) => Some(Value::FloatNumber( (*x as f32)/y )),
@@ -176,10 +169,6 @@ impl Token {
 
     pub fn is_none(&self) -> bool {
         is_enum_variant!(*self.kind, Kind::None)
-    }
-
-    pub fn is_op(&self) -> bool {
-        is_enum_variant!(*self.kind, Kind::Op(_))
     }
 
     pub fn is_letter(&self) -> bool {
