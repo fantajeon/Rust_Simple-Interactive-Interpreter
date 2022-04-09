@@ -78,29 +78,31 @@ impl Parser {
     }
 
     fn _function_call_parameter(&mut self) -> Result<Node, String> {
-        let mut params: Vec<String> = Vec::new();
+        let mut params: Vec<KindValue> = Vec::new();
         while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
             || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
             || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) 
         {
             let mut ct = self.curr_token.take();
-            params.push( ct.kind.take_letter().unwrap() );
+            params.push( ct.kind.take_value().unwrap() );
             self.shift_input();
         }
 
         let result:Option<Node> = params.into_iter().enumerate().rev()
             .fold(None, |prev: Option<Node>, value| -> Option<Node> {
-                    if let Some(nn) = prev {
-                        return Some(Node::Identifier { 
-                                value: value.1, 
-                                next: Some(Box::new(nn)), 
-                            });
-                    } 
-                    return Some(Node::Identifier { 
-                            value: value.1, 
-                            next: None,
-                        });
+                    let nn = if let Some(nn) = prev {
+                        Some(Box::new(nn))
+                    }  else {
+                        None
+                    };
+                    let node = match value.1 {
+                        KindValue::FloatNumber(v) => Node::Num { value: v.into(), next: nn},
+                        KindValue::IntNumber(v) => Node::Num { value: v.into(), next: nn },
+                        KindValue::String(v) => Node::Identifier { value: v, next: nn },
+                    };
+                    return Some(node);
                 });
+        println!("___function_call_parameter: {:?}", result);
         return Ok(result.unwrap_or(Node::None));
     }
 
@@ -237,7 +239,7 @@ impl Parser {
                 self.curr_token.replace(tok);
             }
         } else {
-            if self.curr_token.is_letter() {
+            if self.curr_token.is_letter() || self.curr_token.is_numbers() {
                 result.set_next_identity( self._function_call_parameter()? );
             }
         }

@@ -214,13 +214,32 @@ impl Interpreter {
             },
             Node::Num{value, next} => {
                 // next 값이 있을 경우 tuple 처리를 해야한다.
+                let next_value = if let Some(n) = next {
+                        Some(self.visit(n)?)
+                    } else {
+                        None
+                    };
+                if next_value.is_none() {
+                    return Ok( Rc::new(value.to_owned()) );
+                }
+                if let Some(n) = next_value {
+                    let mut varr: VecDeque<Rc<Value>> = VecDeque::new();
+                    varr.push_back(Rc::new(value.to_owned()));
+                    if let Value::Tuple(varr_next) = &*n {
+                        varr.extend( varr_next.iter().map(Rc::clone) );
+                    } else {
+                        varr.push_back(Rc::clone(&n));
+                    }
+
+                    println!("Building Tuple: {:?}", varr);
+                    return Ok( Rc::new( Value::Tuple(varr) ) );
+                }
                 return Ok( Rc::new(value.to_owned()) );
             },
             Node::Identifier{value, next} => {
                 let v = self.current_scope.lookup(value);
                 if v.is_none() {
-                    //println!("Symbol Table: {:?}", self.current_scope);
-                    return Err("Cannot resolve symbol".to_string());
+                    return Err( format!("Cannot resolve symbol: {}", value) );
                 }
                 let next_value = if let Some(n) = next {
                         Some(self.visit(n)?)
@@ -302,7 +321,7 @@ fn test_basic_arithmetic() {
     //i.input("a + b + c + 1");
     //i.input("fn avg a b c => a + b + c + 1");
     //i.input("avg a b c");
-    i.input("avg 1 b 2.0");
+    i.input("avg 1 3 2.0");
     //println!("output={:?}", i.input("avg a b avg a b c"));
     //i.input(".1 + 1");
     //i.input("2 - 1");
