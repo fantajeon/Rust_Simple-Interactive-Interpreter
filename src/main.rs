@@ -101,8 +101,22 @@ impl ScopeSymbolTable {
         return old;
     }
 
-    pub fn insert(&mut self, sym: SymValue) {
-        self.symbols.insert( sym.name.to_string(), Rc::new(sym) );
+    pub fn insert(&mut self, new_sym: SymValue) -> Result<(),String>{
+        let old_val = self.symbols.get(&new_sym.name);
+        if let Some(old_symval) = old_val {
+            match (&(*old_symval).kind_value, &new_sym.kind_value) {
+                (SimKindValue::Function {..}, SimKindValue::Function {..}) => {},
+                (SimKindValue::Value {..}, SimKindValue::Value { ..}) => {},
+                (SimKindValue::Tuple {..}, SimKindValue::Tuple { ..}) => {},
+                _ => {
+                    return Err(format!("mis-matched symbol types:{:?}, {:?}", old_symval, new_sym));
+                }
+            }
+            self.symbols.insert( new_sym.name.to_string(), Rc::new(new_sym) );
+            return Ok(());
+        }
+        self.symbols.insert( new_sym.name.to_string(), Rc::new(new_sym) );
+        return Ok(());
     }
 
     pub fn lookup(&self, sym: &String) -> Option<Rc<SymValue>> {
@@ -110,9 +124,9 @@ impl ScopeSymbolTable {
             return Some(Rc::clone(v));
         }
 
-        if let Some(parent) = &self.parent {
-            return parent.lookup(sym);
-        }
+        //if let Some(parent) = &self.parent {
+        //    return parent.lookup(sym);
+        //}
 
         return None;
     }
@@ -175,13 +189,12 @@ impl Interpreter {
             Node::Assign{left, right} => {
                 let var_name =left.identity_value().unwrap();
                 let b = self.visit(right)?;
-                println!("DEBUG(var table) = {:?}, {:?}", var_name, b);
                 self.current_scope.insert(
                         SymValue::new_value(
                             &var_name, 
                             Rc::clone(&b)
                         )
-                    );
+                    )?;
                 return Ok(b);
             },
             Node::BinOp{left, op, right} => { 
@@ -209,7 +222,7 @@ impl Interpreter {
                 self.current_scope.insert( SymValue::new_function(
                         name,
                         params, 
-                        Rc::clone(body) ) );
+                        Rc::clone(body) ) )?;
                 return Ok(Rc::new(Value::None));
             },
             Node::Num{value, next} => {
