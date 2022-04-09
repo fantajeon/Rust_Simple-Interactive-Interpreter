@@ -154,6 +154,7 @@ impl Interpreter {
         let mut parser = Parser::new();
 
         let result = parser.parse( tokens, self )?;
+        println!("======> result({}) = {:?}", input, result);
 
         return Ok(result);
     }
@@ -199,7 +200,6 @@ impl Interpreter {
             },
             Node::FunctionDef{name, params, body} => {
                 println!("create function: {} with {:?}", name, params);
-                //self.func.insert( name.to_owned(), Rc::clone( body ) );
                 let params: Vec<String> = params.iter().filter_map( |t| {
                     if let Node::Identifier{value, ..} = t {
                         return Some(value.to_string());
@@ -213,7 +213,6 @@ impl Interpreter {
                 return Ok(Rc::new(Value::None));
             },
             Node::Num{value, next} => {
-                // next 값이 있을 경우 tuple 처리를 해야한다.
                 let next_value = if let Some(n) = next {
                         Some(self.visit(n)?)
                     } else {
@@ -256,13 +255,22 @@ impl Interpreter {
                         if let Some(v) = next_value {
                             match &*v {
                                 Value::Tuple(ref v) => {
+                                    if params.len() != v.len() {
+                                        return Err(format!("function parameter is not matched: {}, but given {}", params.len(), v.len()));
+                                    }
                                     for p in params.iter().zip(v.iter()) {
                                         let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
                                         frame.insert( sym );
                                     }
                                 },
                                 _ => {
-
+                                    if params.len() > 1 {
+                                        return Err(format!("function parameter is not matched: {}, but 1", params.len()));
+                                    }
+                                    for p in params.iter().zip(vec![v].iter()) {
+                                        let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
+                                        frame.insert( sym );
+                                    }
                                 },
                             }
                         }
