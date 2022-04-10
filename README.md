@@ -1,4 +1,4 @@
-# rust_simple_interpreter_sample for Kata
+# Rust Version Simple Interactive Interpreter for Kata
 This program is built by Rust to practice myself.
 
 # Features
