@@ -1,76 +1,39 @@
+use std::fmt::Debug;
 use std::collections::HashSet;
 use std::{collections::VecDeque, rc::Rc};
 
-use super::basic::*;
+use super::{symbol::*, basic::*, node::*};
 
 
-#[derive(Debug)]
-pub enum Node {
-    None,
-    FunctionDef{ 
-        name: String, 
-        params: Vec<Node>,
-        body: Rc<Node>,
-    },
-    Assign {
-        left: Box<Node>, 
-        right: Box<Node>,
-    },
-    BinOp{ 
-        left: Box<Node>, 
-        op: String,
-        right: Box<Node>,
-    },
-    Num{ 
-        value: Value,
-        next: Option<Box<Node>>,
-    },
-    Identifier{ 
-        value: String,
-        next: Option<Box<Node>>,
-     },
-}
-
-impl Node {
-    pub fn is_identifier(&self) -> bool {
-        return is_enum_variant!(self, Node::Identifier{..});
-    }
-
-    pub fn identity_value(&self) -> Option<&String> {
-        match self {
-            Node::Identifier { value, .. } => Some(value),
-            _ => None,
-        }
-    }
-
-    pub fn set_next_identity(&mut self, next_value: Node) {
-        if let Node::Identifier { ref mut next, .. } = self {
-            *next = Some(Box::new(next_value));
-        }
-    }
-}
-
-
-pub trait Evaluator {
-    fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String>;
+pub trait SymbolLookup {
+    fn lookup(&self, sym_name: &str) -> Option<Rc<SymValue>>;
 }
 
 #[derive(Debug)]
-pub struct Parser {
+pub struct Parser<'a, S>
+where S: SymbolLookup + Sized + Debug
+{
     curr_token: Token,
     input: VecDeque<Token>,
+    symbol_table: Option<&'a S>,
 }
 
-impl Default for Parser {
+impl<'a, S> Default for Parser<'a, S>
+where S: SymbolLookup + Sized + Debug
+{
     fn default() -> Self { 
-        Parser { curr_token: Token::default(), input: VecDeque::new() }
+        Parser { curr_token: Token::default(), input: VecDeque::new(), symbol_table: Option::None }
     }
 }
-impl Parser {
-    pub fn new() -> Self {
+
+impl<'a, S> Parser<'a, S> 
+where S: SymbolLookup + Sized + Debug
+{
+    pub fn new(e: &'a S, input: VecDeque<Token>) -> Self {
         Parser { 
             curr_token: Token::default(),
-            input: VecDeque::new(),
+            input: input,
+            symbol_table: Some(e),
         }
     }
 
@@ -79,32 +42,61 @@ impl Parser {
         return std::mem::replace( &mut self.curr_token, new);
     }
 
-    fn _function_call_parameter(&mut self) -> Result<Node, String> {
-        let mut params: Vec<KindValue> = Vec::new();
-        while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
-            || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
-            || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) 
-        {
-            let mut ct = self.curr_token.take();
-            params.push( ct.kind.take_value().unwrap() );
-            self.shift_input();
+    fn _function_call_parameter(&mut self, func_name: &str, num_params: usize) -> Result<Vec<Node>, String> {
+        println!("parsing function call_parameters: {} with num param({})", func_name, num_params);
+        let mut result_params: Vec<Node> = Vec::new();
+        for _ in 0..num_params {
+            if !(is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
+                || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
+                || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) ) {
+                return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
+            }
+            let ct = self.curr_token.take();
+            if ct.is_letter() {
+                let sym_name = ct.raw_string;
+                if let Some(sym_value) = self.symbol_table.unwrap().lookup(&sym_name) {
+                    if let SimKindValue::Function { ref body, ref params }  = sym_value.kind_value {
+                        self.shift_input();
+                        let result = self._function_call_parameter(sym_name.as_str(), (*params).len())?;
+
+                        let node = Node::FunctionCall { 
+                            name: sym_name,
+                            params_name: Rc::clone(params),
+                            params: result,
+                            body: Rc::clone(body),
+                        };
+
+                        result_params.push( node );
+                    } else {
+                        let node = Node::Identifier { 
+                            value: sym_name,
+                        };
+                        result_params.push( node );
+                        self.shift_input();
+                    }
+                } else {
+                    let node = Node::Identifier { 
+                        value: sym_name,
+                    };
+                    result_params.push( node );
+                    self.shift_input();
+                }
+            } else {
+                let node = match *ct.kind {
+                    Kind::FloatNumber(v) => Node::Num { value: v.into()},
+                    Kind::IntNumber(v) => Node::Num { value: v.into()},
+                    _ => unreachable!("please check your code"),
+                };
+                result_params.push( node );
+                self.shift_input();
+            }
         }
 
-        let result:Option<Node> = params.into_iter().enumerate().rev()
-            .fold(None, |prev: Option<Node>, value| -> Option<Node> {
-                    let nn = if let Some(nn) = prev {
-                        Some(Box::new(nn))
-                    }  else {
-                        None
-                    };
-                    let node = match value.1 {
-                        KindValue::FloatNumber(v) => Node::Num { value: v.into(), next: nn},
-                        KindValue::IntNumber(v) => Node::Num { value: v.into(), next: nn },
-                        KindValue::String(v) => Node::Identifier { value: v, next: nn },
-                    };
-                    return Some(node);
-                });
-        return Ok(result.unwrap_or(Node::None));
+        if result_params.len() != num_params {
+            return Err("Parsing error, not enough to be parameters".to_string());
+        }
+
+        return Ok(result_params);
     }
 
     fn _function_def_parameter(&mut self) -> Result<Vec<Node>, String> {
@@ -120,7 +112,6 @@ impl Parser {
             params_set.insert( param_name.to_string() );
             result.push(Node::Identifier { 
                 value: param_name,
-                next: None,
             });
             self.shift_input();
         }
@@ -152,29 +143,44 @@ impl Parser {
     fn _factor(&mut self) -> Result<Node,String> {
         match &*self.curr_token.kind {
             Kind::FloatNumber(v) => {
-                let n = Node::Num { value: Value::FloatNumber(*v), next: None };
+                let n = Node::Num { value: Value::FloatNumber(*v) };
                 self.shift_input();
                 return Ok(n);
             },
             Kind::IntNumber(v) => {
-                let n = Node::Num { value: Value::IntNumber(*v), next: None };
+                let n = Node::Num { value: Value::IntNumber(*v) };
                 self.shift_input();
                 return Ok(n);
             },
             Kind::Letter(var) => {
-                let n = Node::Identifier { value: var.clone(), next: None };
+                let var_name = var.clone();
                 self.shift_input();
+                let n: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
+                    if let SimKindValue::Function { ref body, ref params, .. } = sym_val.kind_value {
+                        let n = Node::FunctionCall { 
+                                name: var_name.to_string(),
+                                body: Rc::clone(body),
+                                params_name: Rc::clone(params),
+                                params: self._function_call_parameter( var_name.as_str(), params.len() )?
+                            };
+                        n
+                    } else {
+                        Node::Identifier { value: var_name.to_string() }
+                    }
+                } else {
+                    Node::Identifier { value: var_name.to_string() }
+                };
                 let mut ct = self.curr_token.take();
                 if let Kind::Op(v) = &*ct.kind {
                     if v == "=" {
                         self.shift_input();
                         let expr_node = self._expression()?;
-                        let node = Node::BinOp { 
+                        let op_node = Node::BinOp { 
                             left: Box::new(n), 
                             op: ct.kind.take_op().unwrap(),
                             right: Box::new(expr_node) 
                         };
-                        return Ok(node);
+                        return Ok(op_node);
                     } 
                 } 
                 self.curr_token.replace(ct);
@@ -189,7 +195,7 @@ impl Parser {
                 self.shift_input();
                 return Ok(n);
             },
-            _ => { },
+            _ => {},
         }
         return Err("Unknown Rules!".to_string());
     }
@@ -247,14 +253,7 @@ impl Parser {
                     break;
                 }
             } else {
-                if self.curr_token.is_letter() || self.curr_token.is_numbers() {
-                    if !result.is_identifier() {
-                        return Err("Syntax Error".to_string());
-                    }
-                    result.set_next_identity( self._function_call_parameter()? );
-                } else {
-                    break;
-                }
+                break;
             }
         }
         return Ok(result);
@@ -275,29 +274,14 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self, token: VecDeque<Token>, e: &mut dyn Evaluator) -> Result<Option<f32>,String> 
+    pub fn parse(&mut self) -> Result<Option<Node>,String> 
     {
-        self.input = token;
         self.shift_input();
-        let mut ast: Vec<Rc<Node>> = Vec::new();
-        let mut last_value = None;
-        loop {
-            if self.curr_token.is_none() {
-                break;
-            }
-            let n = self.stmt()?;
-            let result = e.evaluate(&n)?;
-            ast.push(Rc::new(n));
-            last_value = Some(Rc::clone(&result));
-        }
+        let ast = self.stmt()?;
 
-        if ast.len() > 1 {
-            return Err("Syntax Error".to_string());
+        if !self.curr_token.is_none() {
+            return Err(format!("Unexpectable Input Value, {:?}", self.input));
         }
-
-        if let Some(r) = last_value {
-            return Ok(r.get_result());
-        }
-        return Err("None".to_string());
+        return Ok(Some(ast));
     }
 }
