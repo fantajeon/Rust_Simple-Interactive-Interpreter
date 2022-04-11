@@ -1,76 +1,39 @@
 use std::collections::HashSet;
 use std::{collections::VecDeque, rc::Rc};
 
-use super::basic::*;
-
-
-#[derive(Debug)]
-pub enum Node {
-    None,
-    FunctionDef{ 
-        name: String, 
-        params: Vec<Node>,
-        body: Rc<Node>,
-    },
-    Assign {
-        left: Box<Node>, 
-        right: Box<Node>,
-    },
-    BinOp{ 
-        left: Box<Node>, 
-        op: String,
-        right: Box<Node>,
-    },
-    Num{ 
-        value: Value,
-        next: Option<Box<Node>>,
-    },
-    Identifier{ 
-        value: String,
-        next: Option<Box<Node>>,
-     },
-}
-
-impl Node {
-    pub fn is_identifier(&self) -> bool {
-        return is_enum_variant!(self, Node::Identifier{..});
-    }
-
-    pub fn identity_value(&self) -> Option<&String> {
-        match self {
-            Node::Identifier { value, .. } => Some(value),
-            _ => None,
-        }
-    }
-
-    pub fn set_next_identity(&mut self, next_value: Node) {
-        if let Node::Identifier { ref mut next, .. } = self {
-            *next = Some(Box::new(next_value));
-        }
-    }
-}
+use super::{symbol::*, basic::*, node::*};
 
 
 pub trait Evaluator {
     fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String>;
+    fn lookup(&self, sym_name: &str) -> Option<Rc<SymValue>>;
 }
 
 #[derive(Debug)]
-pub struct Parser {
+pub struct Parser<'a, E> 
+where E: Evaluator + Sized
+{
     curr_token: Token,
     input: VecDeque<Token>,
+    evaluator: Option<&'a E>,
 }
 
-impl Default for Parser {
+impl<'a, E> Default for Parser<'a, E>
+where E: Evaluator + Sized
+{
     fn default() -> Self { 
-        Parser { curr_token: Token::default(), input: VecDeque::new() }
+        Parser { curr_token: Token::default(), input: VecDeque::new(), evaluator: Option::None }
     }
 }
-impl Parser {
-    pub fn new() -> Self {
+
+impl<'a, E> Parser<'a, E> 
+where E: Evaluator + Sized
+{
+    pub fn new(e: &'a E, input: VecDeque<Token>) -> Self {
         Parser { 
             curr_token: Token::default(),
-            input: VecDeque::new(),
+            input: input,
+            evaluator: Some(e),
         }
     }
 
@@ -86,6 +49,9 @@ impl Parser {
             || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) 
         {
             let mut ct = self.curr_token.take();
+            //if ct.is_letter() {
+            //    self.evaluator.unwrap().lookup(ct.value
+            //}
             params.push( ct.kind.take_value().unwrap() );
             self.shift_input();
         }
@@ -189,7 +155,7 @@ impl Parser {
                 self.shift_input();
                 return Ok(n);
             },
-            _ => { },
+            _ => {},
         }
         return Err("Unknown Rules!".to_string());
     }
@@ -275,29 +241,13 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self, token: VecDeque<Token>, e: &mut dyn Evaluator) -> Result<Option<f32>,String> 
+    pub fn parse(&mut self) -> Result<Option<Node>,String> 
     {
-        self.input = token;
         self.shift_input();
-        let mut ast: Vec<Rc<Node>> = Vec::new();
-        let mut last_value = None;
-        loop {
-            if self.curr_token.is_none() {
-                break;
-            }
-            let n = self.stmt()?;
-            let result = e.evaluate(&n)?;
-            ast.push(Rc::new(n));
-            last_value = Some(Rc::clone(&result));
+        if self.curr_token.is_none() {
+            return Ok(None);
         }
-
-        if ast.len() > 1 {
-            return Err("Syntax Error".to_string());
-        }
-
-        if let Some(r) = last_value {
-            return Ok(r.get_result());
-        }
-        return Err("None".to_string());
+        let ast = self.stmt()?;
+        return Ok(Some(ast));
     }
 }

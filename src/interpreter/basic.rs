@@ -167,6 +167,13 @@ impl Token {
         Token{kind: Box::new(v), value: Value::None}
     }
 
+    pub fn get_string(&self) -> Option<&str> {
+        match &self.value {
+            Value::String(x) => return Some(&x),
+            _ => return None,
+        };
+    }
+
     pub fn is_none(&self) -> bool {
         is_enum_variant!(*self.kind, Kind::None)
     }

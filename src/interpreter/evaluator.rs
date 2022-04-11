@@ -1,6 +1,6 @@
 
 use std::{collections::{HashMap, VecDeque}, rc::Rc};
-use super::{basic::*, parser::*, lexer::*};
+use super::{basic::*, parser::*, lexer::*, symbol::*, node::*};
 /*
 stat            ::= function | expression
 function        ::= fn-keyword fn-name { identifier } fn-operator expression
@@ -23,90 +23,6 @@ number          ::= { digit } [ '.' digit { digit } ]
 letter          ::= 'a' | 'b' | ... | 'y' | 'z' | 'A' | 'B' | ... | 'Y' | 'Z'
 digit           ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 */
-
-
-#[derive(Debug)]
-pub enum SimKindValue {
-    Value{
-        value: Rc<Value>,
-    },
-    Function{
-        body: Rc<Node>,
-        params: Vec<String>,
-    },
-}
-#[derive(Debug)]
- pub struct SymValue {
-    name: String,
-    kind_value: SimKindValue,
-}
-
-impl SymValue {
-    pub fn get_name(&self) -> &String {
-        return &self.name;
-    }
-
-    pub fn new_value(name: &str, value: Rc<Value>) -> Self {
-        SymValue{ name: name.to_string(), kind_value: SimKindValue::Value{value: value} }
-    }
-
-    pub fn new_function(name: &str, params: Vec<String>, node: Rc<Node>) -> Self {
-        SymValue{ 
-            name: name.to_string(), 
-            kind_value: SimKindValue::Function{
-                params: params,
-                body: node
-            } 
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ScopeSymbolTable {
-    pub parent: Option<Box<ScopeSymbolTable>>,
-    pub symbols: HashMap<String,Rc<SymValue>>,
-}
-
-impl ScopeSymbolTable {
-    pub fn new(parent: Option<Box<ScopeSymbolTable>>) -> Self {
-        ScopeSymbolTable { parent: parent, symbols: HashMap::new() }
-    }
-
-    pub fn take_parent(&mut self) -> Option<Box<ScopeSymbolTable>> {
-        let old = std::mem::replace(&mut self.parent, None);
-        return old;
-    }
-
-    pub fn insert(&mut self, new_sym: SymValue) -> Result<Option<Rc<SymValue>>,String>{
-        let old_val = self.symbols.get(&new_sym.name);
-        if let Some(old_symval) = old_val {
-            match (&(*old_symval).kind_value, &new_sym.kind_value) {
-                (SimKindValue::Function {..}, SimKindValue::Function {..}) => {},
-                (SimKindValue::Value {..}, SimKindValue::Value { ..}) => {},
-                _ => {
-                    return Err(format!("mis-matched symbol types:{:?}, {:?}", old_symval, new_sym));
-                }
-            }
-            let old_ret = Rc::clone(old_symval);
-            self.symbols.insert( new_sym.name.to_string(), Rc::new(new_sym) );
-            return Ok(Some(old_ret));
-        }
-        self.symbols.insert( new_sym.name.to_string(), Rc::new(new_sym) );
-        return Ok(None);
-    }
-
-    pub fn lookup(&self, sym: &String) -> Option<Rc<SymValue>> {
-        if let Some(v) = self.symbols.get(sym) {
-            return Some(Rc::clone(v));
-        }
-
-        //if let Some(parent) = &self.parent {
-        //    return parent.lookup(sym);
-        //}
-
-        return None;
-    }
-}
 #[derive(Debug)]
 pub struct Interpreter {
     func: HashMap<String,Rc<Node>>,
@@ -132,6 +48,10 @@ impl Evaluator for Interpreter {
             _ => return Err("Invalidated Result".to_string()),
         }
     }
+
+    fn lookup(&self, sym_name: &str ) -> Option<Rc<SymValue>> {
+        self.current_scope.lookup(sym_name)
+    }
 }
 
 impl Interpreter {
@@ -155,12 +75,17 @@ impl Interpreter {
         if tokens.len() == 0 {
             return Ok(None);
         }
-        let mut parser = Parser::new();
+        let mut parser = Parser::new(self, tokens);
 
-        let result = parser.parse( tokens, self )?;
+        let ast = parser.parse()?;
+        let result = self.evaluate(&ast.unwrap())?;
         println!("======> result({}) = {:?}", input, result);
 
-        return Ok(result);
+        let last_value = Some(Rc::clone(&result));
+        if let Some(r) = last_value {
+            return Ok(r.get_result());
+        }
+        return Err("Unknown result".to_string());
     }
 
     fn push_stack_frame(&mut self,  frame: ScopeSymbolTable) {
