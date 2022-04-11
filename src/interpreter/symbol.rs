@@ -10,7 +10,7 @@ pub enum SimKindValue {
     },
     Function{
         body: Rc<Node>,
-        params: Vec<String>,
+        params: Rc<Vec<String>>,
     },
 }
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl SymValue {
         SymValue{ name: name.to_string(), kind_value: SimKindValue::Value{value: value} }
     }
 
-    pub fn new_function(name: &str, params: Vec<String>, node: Rc<Node>) -> Self {
+    pub fn new_function(name: &str, params: Rc<Vec<String>>, node: Rc<Node>) -> Self {
         SymValue{ 
             name: name.to_string(), 
             kind_value: SimKindValue::Function{

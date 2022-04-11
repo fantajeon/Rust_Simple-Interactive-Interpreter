@@ -166,13 +166,12 @@ impl Interpreter {
                 }
                 self.current_scope.insert( SymValue::new_function(
                         name,
-                        params, 
+                        Rc::new(params), 
                         Rc::clone(body) ) )?;
                 return Ok(Rc::new(Value::None));
             },
-            Node::FunctionCall { value, body, params  } => {
+            Node::FunctionCall { value, body, params, params_name  } => {
                 println!("function call:::::");
-                return Err("implemented".to_string());
                 //let mut frame = ScopeSymbolTable::new(None);
                 //let mut rest_values: VecDeque<Rc<Value>> = VecDeque::new();
                 

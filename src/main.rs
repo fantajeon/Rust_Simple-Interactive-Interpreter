@@ -13,11 +13,11 @@ fn test_basic_arithmetic() {
     //i.input("c = 100");
     //i.input("a + 1 + b");
     //i.input("a + b + c + 1");
-    //i.input("fn avg a b c => a + b + c + 1");
+    i.input("fn avg a b c => a + b + c + 1");
     //i.input("avg a b c");
-    //i.input("avg 1 3 2.0");
+    i.input("avg a 1 2.0");
     //i.input("4 / 2 * 3");
-    i.input("x = y = 713");
+    //i.input("x = y = 713");
     //i.input("1 + 2 * 3 / 4 + 5");
     //println!("output={:?}", i.input("avg a b avg a b c"));
     //i.input(".1 + 1");
