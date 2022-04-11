@@ -37,6 +37,13 @@ impl SymValue {
             } 
         }
     }
+
+    pub fn is_function(&self) -> bool {
+        match self.kind_value {
+            SimKindValue::Function{ .. } => return true,
+            _ => return false,
+        }
+    }
 }
 
 #[derive(Debug)]

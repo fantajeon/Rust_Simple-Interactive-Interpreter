@@ -159,12 +159,17 @@ impl Value {
 #[derive(Debug)]
 pub struct Token {
     pub kind: Box<Kind>,
+    pub raw_string: String,
     pub value: Value,
 }
 
 impl Token {
-    pub fn new(v: Kind) -> Self {
-        Token{kind: Box::new(v), value: Value::None}
+    pub fn new(v: Kind, raw_string: &str) -> Self {
+        Token{
+            kind: Box::new(v), 
+            raw_string: raw_string.to_string(), 
+            value: Value::None
+        }
     }
 
     pub fn get_string(&self) -> Option<&str> {
@@ -205,6 +210,6 @@ impl Token {
 
 impl Default for Token {
     fn default() -> Self { 
-        Token{kind: Box::new(Kind::None), value: Value::None}
+        Token{kind: Box::new(Kind::None), raw_string: "".to_string(), value: Value::None}
     }
 }

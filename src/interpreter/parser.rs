@@ -4,36 +4,35 @@ use std::{collections::VecDeque, rc::Rc};
 use super::{symbol::*, basic::*, node::*};
 
 
-pub trait Evaluator {
-    fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String>;
+pub trait SymbolLookup {
     fn lookup(&self, sym_name: &str) -> Option<Rc<SymValue>>;
 }
 
 #[derive(Debug)]
-pub struct Parser<'a, E> 
-where E: Evaluator + Sized
+pub struct Parser<'a, S>
+where S: SymbolLookup + Sized
 {
     curr_token: Token,
     input: VecDeque<Token>,
-    evaluator: Option<&'a E>,
+    symbol_table: Option<&'a S>,
 }
 
-impl<'a, E> Default for Parser<'a, E>
-where E: Evaluator + Sized
+impl<'a, S> Default for Parser<'a, S>
+where S: SymbolLookup + Sized
 {
     fn default() -> Self { 
-        Parser { curr_token: Token::default(), input: VecDeque::new(), evaluator: Option::None }
+        Parser { curr_token: Token::default(), input: VecDeque::new(), symbol_table: Option::None }
     }
 }
 
-impl<'a, E> Parser<'a, E> 
-where E: Evaluator + Sized
+impl<'a, S> Parser<'a, S> 
+where S: SymbolLookup + Sized
 {
-    pub fn new(e: &'a E, input: VecDeque<Token>) -> Self {
+    pub fn new(e: &'a S, input: VecDeque<Token>) -> Self {
         Parser { 
             curr_token: Token::default(),
             input: input,
-            evaluator: Some(e),
+            symbol_table: Some(e),
         }
     }
 
@@ -42,35 +41,45 @@ where E: Evaluator + Sized
         return std::mem::replace( &mut self.curr_token, new);
     }
 
-    fn _function_call_parameter(&mut self) -> Result<Node, String> {
-        let mut params: Vec<KindValue> = Vec::new();
+    fn _function_call_parameter(&mut self) -> Result<Vec<Node>, String> {
+        let mut params: Vec<Node> = Vec::new();
         while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
             || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
             || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) 
         {
             let mut ct = self.curr_token.take();
-            //if ct.is_letter() {
-            //    self.evaluator.unwrap().lookup(ct.value
-            //}
-            params.push( ct.kind.take_value().unwrap() );
+            if ct.is_letter() {
+                println!("DEBUG===> {:?}", ct);
+                let sym_name = ct.raw_string;
+                if let Some(sym_value) = self.symbol_table.unwrap().lookup(&sym_name) {
+                   if let SimKindValue::Function { ref body, ..} = sym_value.kind_value {
+                        let result = self._function_call_parameter()?;
+                        let node = Node::FunctionCall { 
+                            value: sym_name,
+                            params: result,
+                            body: Rc::clone(body),
+                        };
+
+                        params.push( node );
+                   }
+                } else {
+                    let node = Node::Identifier { 
+                        value: sym_name,
+                    };
+                    params.push( node );
+                }
+            } else {
+                let node = match *ct.kind {
+                    Kind::FloatNumber(v) => Node::Num { value: v.into()},
+                    Kind::IntNumber(v) => Node::Num { value: v.into()},
+                    _ => unreachable!("please check your code"),
+                };
+                params.push( node );
+            }
             self.shift_input();
         }
 
-        let result:Option<Node> = params.into_iter().enumerate().rev()
-            .fold(None, |prev: Option<Node>, value| -> Option<Node> {
-                    let nn = if let Some(nn) = prev {
-                        Some(Box::new(nn))
-                    }  else {
-                        None
-                    };
-                    let node = match value.1 {
-                        KindValue::FloatNumber(v) => Node::Num { value: v.into(), next: nn},
-                        KindValue::IntNumber(v) => Node::Num { value: v.into(), next: nn },
-                        KindValue::String(v) => Node::Identifier { value: v, next: nn },
-                    };
-                    return Some(node);
-                });
-        return Ok(result.unwrap_or(Node::None));
+        return Ok(params);
     }
 
     fn _function_def_parameter(&mut self) -> Result<Vec<Node>, String> {
@@ -86,7 +95,6 @@ where E: Evaluator + Sized
             params_set.insert( param_name.to_string() );
             result.push(Node::Identifier { 
                 value: param_name,
-                next: None,
             });
             self.shift_input();
         }
@@ -118,29 +126,45 @@ where E: Evaluator + Sized
     fn _factor(&mut self) -> Result<Node,String> {
         match &*self.curr_token.kind {
             Kind::FloatNumber(v) => {
-                let n = Node::Num { value: Value::FloatNumber(*v), next: None };
+                let n = Node::Num { value: Value::FloatNumber(*v) };
                 self.shift_input();
                 return Ok(n);
             },
             Kind::IntNumber(v) => {
-                let n = Node::Num { value: Value::IntNumber(*v), next: None };
+                let n = Node::Num { value: Value::IntNumber(*v) };
                 self.shift_input();
                 return Ok(n);
             },
             Kind::Letter(var) => {
-                let n = Node::Identifier { value: var.clone(), next: None };
+                let var_name = var.clone();
                 self.shift_input();
+                let n: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
+                    if let SimKindValue::Function { ref body, .. } = sym_val.kind_value {
+                        let n = Node::FunctionCall { 
+                                value: var_name.to_string(),
+                                body: Rc::clone(body),
+                                params: self._function_call_parameter()?
+                            };
+                        
+                        println!("Function CAll={:?}", n);
+                        n
+                    } else {
+                        Node::Identifier { value: var_name.to_string() }
+                    }
+                } else {
+                    Node::Identifier { value: var_name.to_string()}
+                };
                 let mut ct = self.curr_token.take();
                 if let Kind::Op(v) = &*ct.kind {
                     if v == "=" {
                         self.shift_input();
                         let expr_node = self._expression()?;
-                        let node = Node::BinOp { 
+                        let op_node = Node::BinOp { 
                             left: Box::new(n), 
                             op: ct.kind.take_op().unwrap(),
                             right: Box::new(expr_node) 
                         };
-                        return Ok(node);
+                        return Ok(op_node);
                     } 
                 } 
                 self.curr_token.replace(ct);
@@ -213,14 +237,7 @@ where E: Evaluator + Sized
                     break;
                 }
             } else {
-                if self.curr_token.is_letter() || self.curr_token.is_numbers() {
-                    if !result.is_identifier() {
-                        return Err("Syntax Error".to_string());
-                    }
-                    result.set_next_identity( self._function_call_parameter()? );
-                } else {
-                    break;
-                }
+                break;
             }
         }
         return Ok(result);

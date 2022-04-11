@@ -31,7 +31,22 @@ pub struct Interpreter {
     line: u32,
 }
 
-impl Evaluator for Interpreter {
+impl SymbolLookup for Interpreter {
+    fn lookup(&self, sym_name: &str ) -> Option<Rc<SymValue>> {
+        self.current_scope.lookup(sym_name)
+    }
+}
+
+impl Interpreter {
+    pub fn new() -> Self {
+        Interpreter { 
+            current_scope: Box::new(ScopeSymbolTable::new(None)),
+            func: HashMap::new(), 
+            //ast: Vec::new(),
+            line: 0,
+        }
+    }
+
     fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String> {
         let result = self.visit(ast, &Node::None);
         println!("AST=>>>>{:?}", ast);
@@ -49,20 +64,6 @@ impl Evaluator for Interpreter {
         }
     }
 
-    fn lookup(&self, sym_name: &str ) -> Option<Rc<SymValue>> {
-        self.current_scope.lookup(sym_name)
-    }
-}
-
-impl Interpreter {
-    pub fn new() -> Self {
-        Interpreter { 
-            current_scope: Box::new(ScopeSymbolTable::new(None)),
-            func: HashMap::new(), 
-            //ast: Vec::new(),
-            line: 0,
-        }
-    }
 
     pub fn input(&mut self, input: &str) -> Result<Option<f32>, String> {
         if input.len() == 0 {
@@ -109,16 +110,8 @@ impl Interpreter {
                 self.collect_all_symbols(left, symbol_vec)?;
                 self.collect_all_symbols(right, symbol_vec)?;
             },
-            Node::Num { next, ..} => {
-                if let Some(n) = next {
-                    self.collect_all_symbols(n, symbol_vec)?;
-                }
-            },
-            Node::Identifier { value, next, ..} => {
+            Node::Identifier { value, ..} => {
                 symbol_vec.push( value.to_string() );
-                if let Some(n) = next {
-                    self.collect_all_symbols(n, symbol_vec)?;
-                }
             },
             _ => {}
         }
@@ -177,103 +170,63 @@ impl Interpreter {
                         Rc::clone(body) ) )?;
                 return Ok(Rc::new(Value::None));
             },
-            Node::Num{value, next} => {
-                println!("Scane Num - value: {:?}, next: {:?}", value, next);
-                let next_value = if let Some(n) = next {
-                        if is_enum_variant!(prev_n, Node::None) {
-                            return Err(format!("Syntax Error!"));
-                        }
-                        Some(self.visit(n, curr_n)?)
-                    } else {
-                        None
-                    };
-                if next_value.is_none() {
-                    return Ok( Rc::new(value.to_owned()) );
-                }
-                if let Some(n) = next_value {
-                    let mut varr: VecDeque<Rc<Value>> = VecDeque::new();
-                    varr.push_back(Rc::new(value.to_owned()));
-                    if let Value::Tuple(varr_next) = &*n {
-                        varr.extend( varr_next.iter().map(Rc::clone) );
-                    } else {
-                        varr.push_back(Rc::clone(&n));
-                    }
+            Node::FunctionCall { value, body, params  } => {
+                println!("function call:::::");
+                return Err("implemented".to_string());
+                //let mut frame = ScopeSymbolTable::new(None);
+                //let mut rest_values: VecDeque<Rc<Value>> = VecDeque::new();
+                
+                //println!("!!!!! call function: {:?}, params={:?}", symval, next_value);
+                //if let Some(v) = next_value {
+                //    match &*v {
+                //        Value::Tuple(ref v) => {
+                //            if params.len() > v.len() {
+                //                return Err(format!("function {} parameter is not matched: {}, but given {}", symval.get_name(), params.len(), v.len()));
+                //            }
+                //            let num_param = params.len();
+                //            for p in params.iter().zip(v.iter().take(num_param)) {
+                //                let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
+                //                frame.insert( sym )?;
+                //            }
+                //            for r in v.iter().skip(num_param) {
+                //                rest_values.push_back( Rc::clone(r) );
+                //            }
+                //        },
+                //        _ => {
+                //            if params.len() > 1 {
+                //                return Err(format!("function {} parameter is not matched: {}, but 1", symval.get_name(), params.len()));
+                //            }
+                //            for p in params.iter().zip(vec![v].iter()) {
+                //                let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
+                //                frame.insert( sym )?;
+                //            }
+                //        },
+                //    }
+                //}
 
-                    println!("Building Tuple: {:?}", varr);
-                    return Ok( Rc::new( Value::Tuple(varr) ) );
-                }
+                //self.push_stack_frame(frame);
+                //let mut ret = self.visit(body, curr_n)?;
+                //// merge remaning tuple values
+                //if rest_values.len() > 0 {
+                //    rest_values.push_front( ret );
+                //    ret = Rc::new( Value::Tuple( rest_values ) );
+                //}
+                //self.pop_stack_frame();
+                //return Ok( ret );
+            },
+            Node::Num{value} => {
                 return Ok( Rc::new(value.to_owned()) );
             },
-            Node::Identifier{value, next} => {
+            Node::Identifier{value} => {
                 let v = self.current_scope.lookup(value);
                 if v.is_none() {
                     return Err( format!("Cannot resolve symbol: {}", value) );
                 }
-                let next_value = if let Some(n) = next {
-                        Some(self.visit(n, curr_n)?)
-                    } else {
-                        None
-                    };
-                let symval = v.unwrap();
-                match &symval.kind_value {
-                    SimKindValue::Function { body, params } => {
-                        let mut frame = ScopeSymbolTable::new(None);
-                        let mut rest_values: VecDeque<Rc<Value>> = VecDeque::new();
-                        
-                        println!("!!!!! call function: {:?}, params={:?}", symval, next_value);
-                        if let Some(v) = next_value {
-                            match &*v {
-                                Value::Tuple(ref v) => {
-                                    if params.len() > v.len() {
-                                        return Err(format!("function {} parameter is not matched: {}, but given {}", symval.get_name(), params.len(), v.len()));
-                                    }
-                                    let num_param = params.len();
-                                    for p in params.iter().zip(v.iter().take(num_param)) {
-                                        let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
-                                        frame.insert( sym )?;
-                                    }
-                                    for r in v.iter().skip(num_param) {
-                                        rest_values.push_back( Rc::clone(r) );
-                                    }
-                                },
-                                _ => {
-                                    if params.len() > 1 {
-                                        return Err(format!("function {} parameter is not matched: {}, but 1", symval.get_name(), params.len()));
-                                    }
-                                    for p in params.iter().zip(vec![v].iter()) {
-                                        let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
-                                        frame.insert( sym )?;
-                                    }
-                                },
-                            }
-                        }
 
-                        self.push_stack_frame(frame);
-                        let mut ret = self.visit(body, curr_n)?;
-                        // merge remaning tuple values
-                        if rest_values.len() > 0 {
-                            rest_values.push_front( ret );
-                            ret = Rc::new( Value::Tuple( rest_values ) );
-                        }
-                        self.pop_stack_frame();
-                        return Ok( ret );
-                    },
-                    SimKindValue::Value { value } => {
-                        if let Some(n) = next_value {
-                            // Array Parameter
-                            let mut varr: VecDeque<Rc<Value>> = VecDeque::new();
-                            varr.push_back(Rc::clone(value));
-                            if let Value::Tuple(varr_next) = &*n {
-                                varr.extend( varr_next.iter().map(Rc::clone) );
-                            } else {
-                                varr.push_back(Rc::clone(&n));
-                            }
-
-                            return Ok( Rc::new( Value::Tuple(varr) ) );
-                        }
-                        return Ok( Rc::clone(value) );
-                    },
+                if let SimKindValue::Value{ ref value } = v.as_ref().unwrap().kind_value {
+                    return Ok( Rc::clone(value) );
                 }
+                return Err( format!("Unexpected symbol: {:?}", v) );
             },
             _ => {},
         }

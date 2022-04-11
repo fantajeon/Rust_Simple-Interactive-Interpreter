@@ -22,12 +22,15 @@ pub enum Node {
     },
     Num{ 
         value: Value,
-        next: Option<Box<Node>>,
     },
     Identifier{ 
         value: String,
-        next: Option<Box<Node>>,
-     },
+    },
+    FunctionCall {
+       value: String,
+       params: Vec<Node>,
+       body: Rc<Node>,
+    },
 }
 
 impl Node {
@@ -39,12 +42,6 @@ impl Node {
         match self {
             Node::Identifier { value, .. } => Some(value),
             _ => None,
-        }
-    }
-
-    pub fn set_next_identity(&mut self, next_value: Node) {
-        if let Node::Identifier { ref mut next, .. } = self {
-            *next = Some(Box::new(next_value));
         }
     }
 }

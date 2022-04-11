@@ -24,21 +24,21 @@ pub fn lexer(express: &str) -> VecDeque<Token> {
             })
             .take(1).next().unwrap();
         let t: Option<Token> = match tok.0 {
-            "int" => Some( Token::new( Kind::IntNumber(tok.1.parse::<i32>().unwrap())) ),
-            "float" => Some( Token::new( Kind::FloatNumber(tok.1.parse::<f32>().unwrap())) ),
+            "int" => Some( Token::new( Kind::IntNumber(tok.1.parse::<i32>().unwrap()), &tok.1) ),
+            "float" => Some( Token::new( Kind::FloatNumber(tok.1.parse::<f32>().unwrap()), &tok.1) ),
             "letter" => if tok.1 == "fn" {
-                Some( Token::new( Kind::Keyword(tok.1)) )
+                Some( Token::new( Kind::Keyword(tok.1.clone()), &tok.1) )
             } else {
-                Some( Token::new( Kind::Letter(tok.1)) )
+                Some( Token::new( Kind::Letter(tok.1.clone()), &tok.1) )
             },
             "special" => match tok.1.as_str() {
-                "=" => Some( Token::new( Kind::ASSIGN ) ),
-                "(" => Some( Token::new( Kind::LPAREN ) ),
-                ")" => Some( Token::new( Kind::RPAREN ) ),
+                "=" => Some( Token::new( Kind::ASSIGN, &tok.1 ) ),
+                "(" => Some( Token::new( Kind::LPAREN, &tok.1 ) ),
+                ")" => Some( Token::new( Kind::RPAREN, &tok.1 ) ),
                 _ => None,
             },
-            "fn_op" => Some( Token::new( Kind::FNOP ) ),
-            "ops" => Some( Token::new( Kind::Op(tok.1)) ),
+            "fn_op" => Some( Token::new( Kind::FNOP, &tok.1 ) ),
+            "ops" => Some( Token::new( Kind::Op(tok.1.clone()), &tok.1) ),
             _ => None,
         };
         if t.is_some() {
