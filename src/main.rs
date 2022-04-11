@@ -8,7 +8,7 @@ use interpreter::*;
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     //i.input("y");
-    //i.input("a = 1");
+    i.input("a = 1");
     //i.input("b = 10");
     //i.input("c = 100");
     //i.input("a + 1 + b");

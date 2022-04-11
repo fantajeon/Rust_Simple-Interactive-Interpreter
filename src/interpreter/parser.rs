@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+use core::num;
 use std::collections::HashSet;
 use std::{collections::VecDeque, rc::Rc};
 
@@ -10,7 +12,7 @@ pub trait SymbolLookup {
 
 #[derive(Debug)]
 pub struct Parser<'a, S>
-where S: SymbolLookup + Sized
+where S: SymbolLookup + Sized + Debug
 {
     curr_token: Token,
     input: VecDeque<Token>,
@@ -18,7 +20,7 @@ where S: SymbolLookup + Sized
 }
 
 impl<'a, S> Default for Parser<'a, S>
-where S: SymbolLookup + Sized
+where S: SymbolLookup + Sized + Debug
 {
     fn default() -> Self { 
         Parser { curr_token: Token::default(), input: VecDeque::new(), symbol_table: Option::None }
@@ -26,7 +28,7 @@ where S: SymbolLookup + Sized
 }
 
 impl<'a, S> Parser<'a, S> 
-where S: SymbolLookup + Sized
+where S: SymbolLookup + Sized + Debug
 {
     pub fn new(e: &'a S, input: VecDeque<Token>) -> Self {
         Parser { 
@@ -41,35 +43,45 @@ where S: SymbolLookup + Sized
         return std::mem::replace( &mut self.curr_token, new);
     }
 
-    fn _function_call_parameter(&mut self, num_params: usize) -> Result<Vec<Node>, String> {
+    fn _function_call_parameter(&mut self, func_name: &str, num_params: usize) -> Result<Vec<Node>, String> {
+        println!("parsing function call_parameters: {} with num param({})", func_name, num_params);
         let mut result_params: Vec<Node> = Vec::new();
         for i in 0..num_params {
             if !(is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
                 || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
                 || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) ) {
-                    return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
-                }
+                return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
+            }
             let mut ct = self.curr_token.take();
             if ct.is_letter() {
-                println!("DEBUG===> {:?}", ct);
                 let sym_name = ct.raw_string;
                 if let Some(sym_value) = self.symbol_table.unwrap().lookup(&sym_name) {
-                if let SimKindValue::Function { ref body, ref params }  = sym_value.kind_value {
-                        let result = self._function_call_parameter((*params).len())?;
+                    if let SimKindValue::Function { ref body, ref params }  = sym_value.kind_value {
+                        self.shift_input();
+                        let result = self._function_call_parameter(sym_name.as_str(), (*params).len())?;
+
+                        println!("result(call_params of {} function): {:?}", sym_name, result);
                         let node = Node::FunctionCall { 
-                            value: sym_name,
+                            name: sym_name,
                             params_name: Rc::clone(params),
                             params: result,
                             body: Rc::clone(body),
                         };
 
                         result_params.push( node );
-                }
+                    } else {
+                        let node = Node::Identifier { 
+                            value: sym_name,
+                        };
+                        result_params.push( node );
+                        self.shift_input();
+                    }
                 } else {
                     let node = Node::Identifier { 
                         value: sym_name,
                     };
                     result_params.push( node );
+                    self.shift_input();
                 }
             } else {
                 let node = match *ct.kind {
@@ -78,8 +90,13 @@ where S: SymbolLookup + Sized
                     _ => unreachable!("please check your code"),
                 };
                 result_params.push( node );
+                self.shift_input();
             }
-            self.shift_input();
+        }
+
+        println!("stop to call function result={:?}, with num_param({})", result_params, num_params);
+        if result_params.len() != num_params {
+            return Err("Parsing error, not enough to be parameters".to_string());
         }
 
         return Ok(result_params);
@@ -141,13 +158,16 @@ where S: SymbolLookup + Sized
             Kind::Letter(var) => {
                 let var_name = var.clone();
                 self.shift_input();
+                println!("Kind::Letter={}, SymbolTable:{:?}", var_name, self.symbol_table.unwrap());
                 let n: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
+                    println!("Found symbol {:?} of {}", sym_val, var_name);
                     if let SimKindValue::Function { ref body, ref params, .. } = sym_val.kind_value {
+                        println!("Found function symbol!: {:?} with params {:?}", sym_val, params);
                         let n = Node::FunctionCall { 
-                                value: var_name.to_string(),
+                                name: var_name.to_string(),
                                 body: Rc::clone(body),
                                 params_name: Rc::clone(params),
-                                params: self._function_call_parameter( params.len() )?
+                                params: self._function_call_parameter( var_name.as_str(), params.len() )?
                             };
                         
                         println!("Function CAll={:?}", n);
@@ -156,7 +176,7 @@ where S: SymbolLookup + Sized
                         Node::Identifier { value: var_name.to_string() }
                     }
                 } else {
-                    Node::Identifier { value: var_name.to_string()}
+                    Node::Identifier { value: var_name.to_string() }
                 };
                 let mut ct = self.curr_token.take();
                 if let Kind::Op(v) = &*ct.kind {
@@ -265,10 +285,11 @@ where S: SymbolLookup + Sized
     pub fn parse(&mut self) -> Result<Option<Node>,String> 
     {
         self.shift_input();
-        if self.curr_token.is_none() {
-            return Ok(None);
-        }
         let ast = self.stmt()?;
+
+        if !self.curr_token.is_none() {
+            return Err(format!("Unexpectable Input Value, {:?}", self.input));
+        }
         return Ok(Some(ast));
     }
 }

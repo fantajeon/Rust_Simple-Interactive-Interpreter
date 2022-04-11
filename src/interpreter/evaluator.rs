@@ -70,12 +70,14 @@ impl Interpreter {
             return Ok(None);
         }
         self.line += 1;
-        println!("tokenizing={} @ line{}", input, self.line);
+        println!("########## > tokenizing={} @ line{}", input, self.line);
         let tokens = lexer(input);
 
         if tokens.len() == 0 {
             return Ok(None);
         }
+
+        println!("Total Token = {:?}", tokens);
         let mut parser = Parser::new(self, tokens);
 
         let ast = parser.parse()?;
@@ -170,48 +172,24 @@ impl Interpreter {
                         Rc::clone(body) ) )?;
                 return Ok(Rc::new(Value::None));
             },
-            Node::FunctionCall { value, body, params, params_name  } => {
+            Node::FunctionCall { name, body, params, params_name  } => {
                 println!("function call:::::");
-                //let mut frame = ScopeSymbolTable::new(None);
-                //let mut rest_values: VecDeque<Rc<Value>> = VecDeque::new();
+                let mut frame = ScopeSymbolTable::new(None);
                 
-                //println!("!!!!! call function: {:?}, params={:?}", symval, next_value);
-                //if let Some(v) = next_value {
-                //    match &*v {
-                //        Value::Tuple(ref v) => {
-                //            if params.len() > v.len() {
-                //                return Err(format!("function {} parameter is not matched: {}, but given {}", symval.get_name(), params.len(), v.len()));
-                //            }
-                //            let num_param = params.len();
-                //            for p in params.iter().zip(v.iter().take(num_param)) {
-                //                let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
-                //                frame.insert( sym )?;
-                //            }
-                //            for r in v.iter().skip(num_param) {
-                //                rest_values.push_back( Rc::clone(r) );
-                //            }
-                //        },
-                //        _ => {
-                //            if params.len() > 1 {
-                //                return Err(format!("function {} parameter is not matched: {}, but 1", symval.get_name(), params.len()));
-                //            }
-                //            for p in params.iter().zip(vec![v].iter()) {
-                //                let sym = SymValue::new_value(p.0.as_str(), Rc::clone(p.1));
-                //                frame.insert( sym )?;
-                //            }
-                //        },
-                //    }
-                //}
+                println!("!!!!! call function: {:?}, params={:?}, params_name={:?}", name, params, params_name);
+                let num_param = params.len();
+                for p in params_name.iter().zip(params.iter().take(num_param)) {
+                    let param_name = p.0.as_str();
+                    let param_value = self.visit(p.1, &Node::None)?;
+                    let sym = SymValue::new_value(param_name, param_value);
 
-                //self.push_stack_frame(frame);
-                //let mut ret = self.visit(body, curr_n)?;
-                //// merge remaning tuple values
-                //if rest_values.len() > 0 {
-                //    rest_values.push_front( ret );
-                //    ret = Rc::new( Value::Tuple( rest_values ) );
-                //}
-                //self.pop_stack_frame();
-                //return Ok( ret );
+                    println!("Pushed symbol: {:?} under {}", sym, name);
+                    frame.insert( sym )?;
+                }
+                self.push_stack_frame(frame);
+                let mut ret = self.visit(body, curr_n)?;
+                self.pop_stack_frame();
+                return Ok( ret );
             },
             Node::Num{value} => {
                 return Ok( Rc::new(value.to_owned()) );

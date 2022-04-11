@@ -27,7 +27,7 @@ pub enum Node {
         value: String,
     },
     FunctionCall {
-       value: String,
+       name: String,
        params_name: Rc<Vec<String>>,
        params: Vec<Node>,
        body: Rc<Node>,
