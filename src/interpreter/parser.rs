@@ -1,5 +1,4 @@
 use std::fmt::Debug;
-use core::num;
 use std::collections::HashSet;
 use std::{collections::VecDeque, rc::Rc};
 
@@ -46,13 +45,13 @@ where S: SymbolLookup + Sized + Debug
     fn _function_call_parameter(&mut self, func_name: &str, num_params: usize) -> Result<Vec<Node>, String> {
         println!("parsing function call_parameters: {} with num param({})", func_name, num_params);
         let mut result_params: Vec<Node> = Vec::new();
-        for i in 0..num_params {
+        for _ in 0..num_params {
             if !(is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) 
                 || is_enum_variant!(&*self.curr_token.kind, Kind::IntNumber(_)) 
                 || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) ) {
                 return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
             }
-            let mut ct = self.curr_token.take();
+            let ct = self.curr_token.take();
             if ct.is_letter() {
                 let sym_name = ct.raw_string;
                 if let Some(sym_value) = self.symbol_table.unwrap().lookup(&sym_name) {

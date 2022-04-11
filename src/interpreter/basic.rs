@@ -1,5 +1,3 @@
-use std::{rc::Rc, collections::{VecDeque}};
-
 macro_rules! is_enum_variant {
     ($v:expr, $p:pat) => (
         if let $p = $v { true } else { false }
@@ -34,17 +32,17 @@ impl Kind {
         }
     }
     
-    pub fn take_value(&mut self) -> Option<KindValue> {
-        match self {
-            Kind::Letter(v) => {
-                Some(KindValue::String(std::mem::replace(v, "".to_string())))
-            },
-            Kind::IntNumber(v) => Some(KindValue::IntNumber(*v)),
-            Kind::FloatNumber(v) => Some(KindValue::FloatNumber(*v)),
-            _ => None,
-        }
+    //pub fn take_value(&mut self) -> Option<KindValue> {
+    //    match self {
+    //        Kind::Letter(v) => {
+    //            Some(KindValue::String(std::mem::replace(v, "".to_string())))
+    //        },
+    //        Kind::IntNumber(v) => Some(KindValue::IntNumber(*v)),
+    //        Kind::FloatNumber(v) => Some(KindValue::FloatNumber(*v)),
+    //        _ => None,
+    //    }
 
-    }
+    //}
 
     pub fn take_letter(&mut self) -> Option<String> {
         match self {
@@ -72,7 +70,6 @@ impl Kind {
 #[derive(Debug, Clone)]
 pub enum Value {
     None,
-    Tuple(VecDeque<Rc<Value>>),
     IntNumber(i32),
     FloatNumber(f32),
     String(String),
@@ -172,13 +169,6 @@ impl Token {
         }
     }
 
-    pub fn get_string(&self) -> Option<&str> {
-        match &self.value {
-            Value::String(x) => return Some(&x),
-            _ => return None,
-        };
-    }
-
     pub fn is_none(&self) -> bool {
         is_enum_variant!(*self.kind, Kind::None)
     }
@@ -187,10 +177,6 @@ impl Token {
         is_enum_variant!(*self.kind, Kind::Letter(_))
     }
     
-    pub fn is_numbers(&self) -> bool {
-        is_enum_variant!(*self.kind, Kind::IntNumber(_)) || is_enum_variant!(*self.kind, Kind::FloatNumber(_))
-    }
-
     pub fn take(&mut self) -> Token {
         std::mem::replace(self,Token::default())
     }

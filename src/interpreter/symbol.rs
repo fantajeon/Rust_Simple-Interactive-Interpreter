@@ -1,6 +1,6 @@
 
 use std::collections::HashMap;
-use std::{collections::VecDeque, rc::Rc};
+use std::{rc::Rc};
 use super::{basic::*, node::*};
 
 #[derive(Debug)]
@@ -20,9 +20,9 @@ pub enum SimKindValue {
 }
 
 impl SymValue {
-    pub fn get_name(&self) -> &String {
-        return &self.name;
-    }
+    //pub fn get_name(&self) -> &String {
+    //    return &self.name;
+    //}
 
     pub fn new_value(name: &str, value: Rc<Value>) -> Self {
         SymValue{ name: name.to_string(), kind_value: SimKindValue::Value{value: value} }
@@ -35,13 +35,6 @@ impl SymValue {
                 params: params,
                 body: node
             } 
-        }
-    }
-
-    pub fn is_function(&self) -> bool {
-        match self.kind_value {
-            SimKindValue::Function{ .. } => return true,
-            _ => return false,
         }
     }
 }

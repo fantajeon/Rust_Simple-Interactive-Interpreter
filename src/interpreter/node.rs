@@ -5,7 +5,6 @@ use super::basic::Value;
 
 #[derive(Debug)]
 pub enum Node {
-    None,
     FunctionDef{ 
         name: String, 
         params: Vec<Node>,
@@ -35,10 +34,6 @@ pub enum Node {
 }
 
 impl Node {
-    pub fn is_identifier(&self) -> bool {
-        return is_enum_variant!(self, Node::Identifier{..});
-    }
-
     pub fn identity_value(&self) -> Option<&String> {
         match self {
             Node::Identifier { value, .. } => Some(value),

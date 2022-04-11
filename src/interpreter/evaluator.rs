@@ -1,5 +1,5 @@
 
-use std::{collections::{HashMap, VecDeque}, rc::Rc};
+use std::{collections::{HashMap}, rc::Rc};
 use super::{basic::*, parser::*, lexer::*, symbol::*, node::*};
 /*
 stat            ::= function | expression
@@ -48,7 +48,7 @@ impl Interpreter {
     }
 
     fn evaluate(&mut self, ast: &Node) -> Result<Rc<Value>,String> {
-        let result = self.visit(ast, &Node::None);
+        let result = self.visit(ast);
         println!("AST=>>>>{:?}", ast);
         println!("result(AST)={:?}", result);
         println!("(fn)={:?}", self.func);
@@ -102,30 +102,31 @@ impl Interpreter {
         }
     }
 
-    fn collect_all_symbols(&self, n: &Node, symbol_vec: &mut Vec<String>) -> Result<(), String> {
+    fn collect_all_symbols(&self, n: &Node, symbol_vec: &mut Vec<String>) {
         match n {
             Node::Assign{left, right} => {
-                self.collect_all_symbols(left, symbol_vec)?;
-                self.collect_all_symbols(right, symbol_vec)?;
+                self.collect_all_symbols(left, symbol_vec);
+                self.collect_all_symbols(right, symbol_vec);
             },
             Node::BinOp{left, right, ..} => {
-                self.collect_all_symbols(left, symbol_vec)?;
-                self.collect_all_symbols(right, symbol_vec)?;
+                self.collect_all_symbols(left, symbol_vec);
+                self.collect_all_symbols(right, symbol_vec);
             },
             Node::Identifier { value, ..} => {
                 symbol_vec.push( value.to_string() );
             },
+            Node::FunctionCall { name, ..} => {
+                symbol_vec.push( name.to_string() );
+            },
             _ => {}
         }
-        return Ok(());
     }
 
-    fn visit(&mut self, n: &Node, prev_n: &Node) -> Result<Rc<Value>,String> {
-        let curr_n = n;
+    fn visit(&mut self, n: &Node) -> Result<Rc<Value>,String> {
         match n {
             Node::Assign{left, right} => {
                 if let Some(var_name) = left.identity_value() {
-                    let b = self.visit(right, curr_n)?;
+                    let b = self.visit(right)?;
                     self.current_scope.insert(
                             SymValue::new_value(
                                 &var_name, 
@@ -138,8 +139,8 @@ impl Interpreter {
                 return Err(format!("Left side of Assign Problem: {:?} = {:?}", left, right));
             },
             Node::BinOp{left, op, right} => { 
-                let a = self.visit(left, curr_n)?;
-                let b = self.visit(right, curr_n)?;
+                let a = self.visit(left)?;
+                let b = self.visit(right)?;
                 println!("DEBUG(BinOp) = {:?}, {:?}, op={:?}", a, b, op);
                 let r: Rc<Value> = (match op.as_str() {
                     "+" => Some(Rc::new(a.plus(&b).unwrap())),
@@ -160,7 +161,7 @@ impl Interpreter {
                     None
                 }).collect();
                 let mut used_all_symbols: Vec<String>= Vec::new(); 
-                self.collect_all_symbols(body, &mut used_all_symbols)?;
+                self.collect_all_symbols(body, &mut used_all_symbols);
                 for s in &used_all_symbols {
                     if params.iter().filter( |&a| a == s).count() == 0 {
                         return Err(format!("Unknown symbol: {} in function {}" , s, name));
@@ -180,14 +181,14 @@ impl Interpreter {
                 let num_param = params.len();
                 for p in params_name.iter().zip(params.iter().take(num_param)) {
                     let param_name = p.0.as_str();
-                    let param_value = self.visit(p.1, &Node::None)?;
+                    let param_value = self.visit(p.1)?;
                     let sym = SymValue::new_value(param_name, param_value);
 
                     println!("Pushed symbol: {:?} under {}", sym, name);
                     frame.insert( sym )?;
                 }
                 self.push_stack_frame(frame);
-                let mut ret = self.visit(body, curr_n)?;
+                let ret = self.visit(body)?;
                 self.pop_stack_frame();
                 return Ok( ret );
             },
@@ -204,10 +205,8 @@ impl Interpreter {
                     return Ok( Rc::clone(value) );
                 }
                 return Err( format!("Unexpected symbol: {:?}", v) );
-            },
-            _ => {},
+            }
         }
-        return Ok(Rc::new(Value::None));
     }
 }
 
