@@ -77,12 +77,10 @@ impl Interpreter {
             return Ok(None);
         }
 
-        println!("Total Token = {:?}", tokens);
         let mut parser = Parser::new(self, tokens);
 
         let ast = parser.parse()?;
         let result = self.evaluate(&ast.unwrap())?;
-        println!("======> result({}) = {:?}", input, result);
 
         let last_value = Some(Rc::clone(&result));
         if let Some(r) = last_value {
@@ -141,7 +139,6 @@ impl Interpreter {
             Node::BinOp{left, op, right} => { 
                 let a = self.visit(left)?;
                 let b = self.visit(right)?;
-                println!("DEBUG(BinOp) = {:?}, {:?}, op={:?}", a, b, op);
                 let r: Rc<Value> = (match op.as_str() {
                     "+" => Some(Rc::new(a.plus(&b).unwrap())),
                     "-" => Some(Rc::new(a.minus(&b).unwrap())),
@@ -174,17 +171,15 @@ impl Interpreter {
                 return Ok(Rc::new(Value::None));
             },
             Node::FunctionCall { name, body, params, params_name  } => {
-                println!("function call:::::");
                 let mut frame = ScopeSymbolTable::new(None);
                 
-                println!("!!!!! call function: {:?}, params={:?}, params_name={:?}", name, params, params_name);
                 let num_param = params.len();
                 for p in params_name.iter().zip(params.iter().take(num_param)) {
                     let param_name = p.0.as_str();
                     let param_value = self.visit(p.1)?;
                     let sym = SymValue::new_value(param_name, param_value);
 
-                    println!("Pushed symbol: {:?} under {}", sym, name);
+                    println!("Pushed symbol to Stack: {:?} under {}", sym, name);
                     frame.insert( sym )?;
                 }
                 self.push_stack_frame(frame);

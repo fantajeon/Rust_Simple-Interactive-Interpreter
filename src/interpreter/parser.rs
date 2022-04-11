@@ -59,7 +59,6 @@ where S: SymbolLookup + Sized + Debug
                         self.shift_input();
                         let result = self._function_call_parameter(sym_name.as_str(), (*params).len())?;
 
-                        println!("result(call_params of {} function): {:?}", sym_name, result);
                         let node = Node::FunctionCall { 
                             name: sym_name,
                             params_name: Rc::clone(params),
@@ -93,7 +92,6 @@ where S: SymbolLookup + Sized + Debug
             }
         }
 
-        println!("stop to call function result={:?}, with num_param({})", result_params, num_params);
         if result_params.len() != num_params {
             return Err("Parsing error, not enough to be parameters".to_string());
         }
@@ -157,19 +155,14 @@ where S: SymbolLookup + Sized + Debug
             Kind::Letter(var) => {
                 let var_name = var.clone();
                 self.shift_input();
-                println!("Kind::Letter={}, SymbolTable:{:?}", var_name, self.symbol_table.unwrap());
                 let n: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
-                    println!("Found symbol {:?} of {}", sym_val, var_name);
                     if let SimKindValue::Function { ref body, ref params, .. } = sym_val.kind_value {
-                        println!("Found function symbol!: {:?} with params {:?}", sym_val, params);
                         let n = Node::FunctionCall { 
                                 name: var_name.to_string(),
                                 body: Rc::clone(body),
                                 params_name: Rc::clone(params),
                                 params: self._function_call_parameter( var_name.as_str(), params.len() )?
                             };
-                        
-                        println!("Function CAll={:?}", n);
                         n
                     } else {
                         Node::Identifier { value: var_name.to_string() }
