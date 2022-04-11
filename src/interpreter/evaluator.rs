@@ -116,7 +116,7 @@ impl Interpreter {
             Node::FunctionCall { name, ..} => {
                 symbol_vec.push( name.to_string() );
             },
-            _ => {}
+            _ => {},
         }
     }
 

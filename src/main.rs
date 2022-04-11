@@ -8,14 +8,14 @@ use interpreter::*;
 fn test_basic_arithmetic() {
     let mut i = Interpreter::new();
     //i.input("y");
-    i.input("a = 1");
+    i.input("a = 1").unwrap();
     //i.input("b = 10");
     //i.input("c = 100");
     //i.input("a + 1 + b");
     //i.input("a + b + c + 1");
-    i.input("fn avg a b c => a + b + c + 1");
+    i.input("fn avg a b c => a + b + c + 1").unwrap();
     //i.input("avg a b c");
-    i.input("avg a 1 2.0");
+    i.input("avg a 1 2.0").unwrap();
     //i.input("4 / 2 * 3");
     //i.input("x = y = 713");
     //i.input("1 + 2 * 3 / 4 + 5");
@@ -127,4 +127,8 @@ fn conflicts() {
 
 fn main() {
     println!("Hello, world!");
+    let mut i = Interpreter::new();
+    i.input("a = 1");
+    i.input("fn avg a b c => a + b + c + 1").unwrap();
+    i.input("avg a 1 2.0").unwrap();
 }

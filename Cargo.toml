@@ -7,3 +7,9 @@ edition = "2021"
 
 [dependencies]
 regex="1"
+
+[profile.dev]
+opt-level=0
+debug = true
+split-debuginfo = '...'
+lto=false
