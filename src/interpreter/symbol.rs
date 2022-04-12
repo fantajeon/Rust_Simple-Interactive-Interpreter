@@ -20,10 +20,6 @@ pub enum SimKindValue {
 }
 
 impl SymValue {
-    //pub fn get_name(&self) -> &String {
-    //    return &self.name;
-    //}
-
     pub fn new_value(name: &str, value: Rc<Value>) -> Self {
         SymValue{ name: name.to_string(), kind_value: SimKindValue::Value{value: value} }
     }
@@ -61,9 +57,7 @@ impl ScopeSymbolTable {
             match (&(*old_symval).kind_value, &new_sym.kind_value) {
                 (SimKindValue::Function {..}, SimKindValue::Function {..}) => {},
                 (SimKindValue::Value {..}, SimKindValue::Value { ..}) => {},
-                _ => {
-                    return Err(format!("mis-matched symbol types:{:?}, {:?}", old_symval, new_sym));
-                }
+                _ => return Err(format!("mis-matched symbol types:{:?}, {:?}", old_symval, new_sym)),
             }
             let old_ret = Rc::clone(old_symval);
             self.symbols.insert( new_sym.name.to_string(), Rc::new(new_sym) );

@@ -155,36 +155,21 @@ where S: SymbolLookup + Sized + Debug
             Kind::Letter(var) => {
                 let var_name = var.clone();
                 self.shift_input();
-                let n: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
-                    if let SimKindValue::Function { ref body, ref params, .. } = sym_val.kind_value {
-                        let n = Node::FunctionCall { 
-                                name: var_name.to_string(),
-                                body: Rc::clone(body),
-                                params_name: Rc::clone(params),
-                                params: self._function_call_parameter( var_name.as_str(), params.len() )?
-                            };
-                        n
-                    } else {
-                        Node::Identifier { value: var_name.to_string() }
-                    }
-                } else {
-                    Node::Identifier { value: var_name.to_string() }
-                };
-                let mut ct = self.curr_token.take();
-                if let Kind::Op(v) = &*ct.kind {
-                    if v == "=" {
-                        self.shift_input();
-                        let expr_node = self._expression()?;
-                        let op_node = Node::BinOp { 
-                            left: Box::new(n), 
-                            op: ct.kind.take_op().unwrap(),
-                            right: Box::new(expr_node) 
-                        };
-                        return Ok(op_node);
-                    } 
-                } 
-                self.curr_token.replace(ct);
-                return Ok(n);
+                let left: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
+                                    match sym_val.kind_value {
+                                        SimKindValue::Function { ref body, ref params, .. } =>
+                                            Node::FunctionCall { 
+                                                    name: var_name.to_string(),
+                                                    body: Rc::clone(body),
+                                                    params_name: Rc::clone(params),
+                                                    params: self._function_call_parameter( var_name.as_str(), params.len() )?
+                                                },
+                                        _ => Node::Identifier { value: var_name.to_string() },
+                                    }
+                                } else {
+                                    Node::Identifier { value: var_name.to_string() }
+                                };
+                return Ok(left);
             },
             Kind::LPAREN => {
                 self.shift_input();

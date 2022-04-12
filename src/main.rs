@@ -128,7 +128,7 @@ fn conflicts() {
 fn main() {
     println!("Hello, world!");
     let mut i = Interpreter::new();
-    i.input("a = 1");
+    i.input("a = 1").unwrap();
     i.input("fn avg a b c => a + b + c + 1").unwrap();
     i.input("avg a 1 2.0").unwrap();
 }

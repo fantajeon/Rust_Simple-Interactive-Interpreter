@@ -4,12 +4,6 @@ macro_rules! is_enum_variant {
     );
 }
 
-pub enum KindValue {
-    String(String),
-    IntNumber(i32),
-    FloatNumber(f32),
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     None,
@@ -32,18 +26,6 @@ impl Kind {
         }
     }
     
-    //pub fn take_value(&mut self) -> Option<KindValue> {
-    //    match self {
-    //        Kind::Letter(v) => {
-    //            Some(KindValue::String(std::mem::replace(v, "".to_string())))
-    //        },
-    //        Kind::IntNumber(v) => Some(KindValue::IntNumber(*v)),
-    //        Kind::FloatNumber(v) => Some(KindValue::FloatNumber(*v)),
-    //        _ => None,
-    //    }
-
-    //}
-
     pub fn take_letter(&mut self) -> Option<String> {
         match self {
             Kind::Letter(v) => {

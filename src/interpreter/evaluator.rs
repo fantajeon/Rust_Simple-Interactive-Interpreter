@@ -71,7 +71,7 @@ impl Interpreter {
         }
         self.line += 1;
         println!("########## > tokenizing={} @ line{}", input, self.line);
-        let tokens = lexer(input);
+        let tokens = lexer(input)?;
 
         if tokens.len() == 0 {
             return Ok(None);
@@ -145,7 +145,7 @@ impl Interpreter {
                     "/" => Some(Rc::new(a.divide(&b).unwrap())),
                     "*" => Some(Rc::new(a.multiply(&b).unwrap())),
                     "%" => Some(Rc::new(a.modulus(&b).unwrap())),
-                    _ => None,
+                    _ => return Err(format!("Unknown Binary Option: {}", op.as_str())),
                 }).unwrap();
                 return Ok(r);
             },
@@ -191,15 +191,12 @@ impl Interpreter {
                 return Ok( Rc::new(value.to_owned()) );
             },
             Node::Identifier{value} => {
-                let v = self.current_scope.lookup(value);
-                if v.is_none() {
-                    return Err( format!("Cannot resolve symbol: {}", value) );
-                }
+                let v = self.current_scope.lookup(value).ok_or(format!("Unknown symbol: {}", value))?;
 
-                if let SimKindValue::Value{ ref value } = v.as_ref().unwrap().kind_value {
-                    return Ok( Rc::clone(value) );
+                match v.kind_value {
+                    SimKindValue::Value{ ref value } => return Ok( Rc::clone(value) ),
+                    _ => Err( format!("Unexpected symbol: {:?}", v) ),
                 }
-                return Err( format!("Unexpected symbol: {:?}", v) );
             }
         }
     }

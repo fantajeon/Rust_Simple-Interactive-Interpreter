@@ -5,7 +5,7 @@ use std::collections::{VecDeque};
 use super::basic::*;
 
 
-pub fn lexer(express: &str) -> VecDeque<Token> {
+pub fn lexer(express: &str) -> Result<VecDeque<Token>, String> {
     let re = Regex::new( r"(?x)
         (?P<fn_op>=>)              # fn_operator
         |(?P<special>[=\(\)])    # special
@@ -35,7 +35,7 @@ pub fn lexer(express: &str) -> VecDeque<Token> {
                 "=" => Some( Token::new( Kind::ASSIGN, &tok.1 ) ),
                 "(" => Some( Token::new( Kind::LPAREN, &tok.1 ) ),
                 ")" => Some( Token::new( Kind::RPAREN, &tok.1 ) ),
-                _ => None,
+                _ => return Err(format!("unkonwn speical token:{}", tok.1)),
             },
             "fn_op" => Some( Token::new( Kind::FNOP, &tok.1 ) ),
             "ops" => Some( Token::new( Kind::Op(tok.1.clone()), &tok.1) ),
@@ -46,5 +46,5 @@ pub fn lexer(express: &str) -> VecDeque<Token> {
         }
     }
 
-    return toks;
+    return Ok(toks);
 }
