@@ -61,43 +61,31 @@ where S: SymbolLookup + Sized + Debug
                 return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
             }
             let ct = self.curr_token.take();
-            if ct.is_letter() {
-                let sym_name = ct.raw_string;
-                if let Some(sym_value) = self.symbol_table.unwrap().lookup(&sym_name) {
-                    if let SimKindValue::Function { ref body, ref params }  = sym_value.kind_value {
-                        self.shift_input()?;
-                        let result = self._function_call_parameter(sym_name.as_str(), (*params).len())?;
+            self.shift_input()?;
+            match *ct.kind {
+                Kind::Letter(_) => {
+                    let sym_name = &ct.raw_string;
+                    let node = self.symbol_table.unwrap().lookup(&sym_name).map_or(Ok(Node::Identifier { value: sym_name.to_string() }), 
+                        |sym_val| -> Result<Node, String> {
+                            match sym_val.kind_value {
+                                SimKindValue::Function { ref body, ref params } => {
+                                    let result = self._function_call_parameter(sym_name.as_str(), (*params).len())?;
 
-                        let node = Node::FunctionCall { 
-                            name: sym_name,
-                            params_name: Rc::clone(params),
-                            params: result,
-                            body: Rc::clone(body),
-                        };
-
-                        result_params.push( node );
-                    } else {
-                        let node = Node::Identifier { 
-                            value: sym_name,
-                        };
-                        result_params.push( node );
-                        self.shift_input()?;
-                    }
-                } else {
-                    let node = Node::Identifier { 
-                        value: sym_name,
-                    };
-                    result_params.push( node );
-                    self.shift_input()?;
-                }
-            } else {
-                let node = match *ct.kind {
-                    Kind::FloatNumber(v) => Node::Num { value: v.into()},
-                    Kind::IntNumber(v) => Node::Num { value: v.into()},
-                    _ => unreachable!("please check your code"),
-                };
-                result_params.push( node );
-                self.shift_input()?;
+                                    Ok(Node::FunctionCall { 
+                                        name: sym_name.to_string(),
+                                        params_name: Rc::clone(params),
+                                        params: result,
+                                        body: Rc::clone(body),
+                                    })
+                                },
+                                _ => Ok(Node::Identifier { value: sym_name.to_string() }),
+                            }
+                        })?;
+                    result_params.push(node);
+                },
+                Kind::FloatNumber(v) => result_params.push( Node::Num { value: v.into()} ),
+                Kind::IntNumber(v) => result_params.push( Node::Num { value: v.into()} ),
+                _ => unreachable!("please check your code"),
             }
         }
 
