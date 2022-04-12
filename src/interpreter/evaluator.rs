@@ -71,7 +71,8 @@ impl Interpreter {
         println!("########## > tokenizing={} @ line{}", input, self.line);
         let tokens = lexer(input)?;
 
-        if tokens.len() == 0 {
+        if tokens.len() < 2  {
+            // Only have Token::None
             return Ok(None);
         }
 

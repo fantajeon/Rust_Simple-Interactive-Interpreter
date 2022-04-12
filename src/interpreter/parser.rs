@@ -41,7 +41,11 @@ where S: SymbolLookup + Sized + Debug
         if self.input.is_empty() {
             return Err("Empty Input".to_string());
         }
-        let new = self.input.pop_front().unwrap_or(Token::default());
+
+        assert!( !is_enum_variant!( &*self.curr_token.kind, Kind::Eof) );
+
+        //let new = self.input.pop_front().unwrap_or(Token::default());
+        let new = self.input.pop_front().unwrap();
         return Ok(std::mem::replace( &mut self.curr_token, new));
     }
 
@@ -253,7 +257,7 @@ where S: SymbolLookup + Sized + Debug
         self.shift_input()?;
         let ast = self.stmt()?;
 
-        if !self.curr_token.is_none() {
+        if !self.curr_token.is_eof() {
             return Err(format!("Unexpectable Input Value, {:?}", self.input));
         }
         return Ok(Some(ast));

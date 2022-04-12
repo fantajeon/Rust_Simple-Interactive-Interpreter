@@ -46,5 +46,7 @@ pub fn lexer(express: &str) -> Result<VecDeque<Token>, String> {
         }
     }
 
+    toks.push_back(Token::new_eof());
+
     return Ok(toks);
 }

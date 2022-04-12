@@ -7,6 +7,7 @@ macro_rules! is_enum_variant {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Kind {
     None,
+    Eof,
     FloatNumber(f32),
     IntNumber(i32),
     Letter(String),
@@ -147,8 +148,8 @@ impl Token {
         }
     }
 
-    pub fn is_none(&self) -> bool {
-        is_enum_variant!(*self.kind, Kind::None)
+    pub fn is_eof(&self) -> bool {
+        is_enum_variant!(*self.kind, Kind::Eof)
     }
 
     pub fn is_letter(&self) -> bool {
@@ -159,8 +160,12 @@ impl Token {
         std::mem::replace(self,Token::default())
     }
 
-    pub fn replace(&mut self, tok: Token) -> Token {
-        std::mem::replace(self, tok)
+    pub fn new_eof() -> Token {
+        Token{
+            kind: Box::new(Kind::Eof), 
+            raw_string: "[EOF]".to_string(), 
+            value: Value::None
+        }
     }
 }
 
