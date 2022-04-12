@@ -214,32 +214,29 @@ where S: SymbolLookup + Sized + Debug
         let mut result = self._term()?;
 
         loop {
-            if let Some(_) = self.curr_token.take_if(|t| 
-                is_enum_variant!(*t.kind, Kind::ASSIGN)
-            ) {
-                self.shift_input();
-                result = Node::Assign { 
-                    left: Box::new(result), 
-                    right: Box::new(self._expression()?), 
-                };
-            } else if let Some(mut tok) = self.curr_token.take_if(|t| 
-                is_enum_variant!(*t.kind, Kind::Op(_))
-            ) {
-                let v = (*tok.kind).op().unwrap();
-                if v == "+" || v == "-" {
+            let tok = self.curr_token.take();
+            match &*tok.kind {
+                Kind::ASSIGN => {
+                    self.shift_input();
+                    result = Node::Assign { 
+                        left: Box::new(result), 
+                        right: Box::new(self._expression()?), 
+                    };
+                },
+                Kind::Op(v) => {
+                    assert!( v == "+" || v == "-");
                     self.shift_input();
                     result = Node::BinOp { 
                         left: Box::new(result), 
-                        op: tok.kind.take_op().unwrap(),
+                        op: v.clone(),
                         right: Box::new(self._term()?), 
                     };
-                } else {
+                },
+                _ => {
                     self.curr_token.replace(tok);
-                    break;
-                }
-            } else {
-                break;
-            }
+                    break
+                },
+            };
         }
         return Ok(result);
     }

@@ -23,9 +23,15 @@ fn test_basic_arithmetic() {
     //i.input(".1 + 1");
     //i.input("2 - 1");
     //i.input("2 * 3");
-    //i.input("8 + 4 / 3 + (4 *2) % 3");
+    i.input("8 + 4 / 3 + (4 *2) % 3").unwrap();
     //i.input("i = 4 / 3 + (4 *2) % 3");
     //i.input("7 % 4");
+}
+
+#[test]
+fn test_op_sequence() {
+    let mut i = Interpreter::new();
+    assert_eq!(i.input("8 + 4 / 3 + (4 *2) % 3"), Ok(Some(11.333333)));
 }
 
 #[test]
