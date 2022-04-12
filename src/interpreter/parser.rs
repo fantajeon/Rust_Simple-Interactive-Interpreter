@@ -37,9 +37,12 @@ where S: SymbolLookup + Sized + Debug
         }
     }
 
-    fn shift_input(&mut self) -> Token {
+    fn shift_input(&mut self) -> Result<Token, String> {
+        if self.input.is_empty() {
+            return Err("Empty Input".to_string());
+        }
         let new = self.input.pop_front().unwrap_or(Token::default());
-        return std::mem::replace( &mut self.curr_token, new);
+        return Ok(std::mem::replace( &mut self.curr_token, new));
     }
 
     fn _function_call_parameter(&mut self, func_name: &str, num_params: usize) -> Result<Vec<Node>, String> {
@@ -56,7 +59,7 @@ where S: SymbolLookup + Sized + Debug
                 let sym_name = ct.raw_string;
                 if let Some(sym_value) = self.symbol_table.unwrap().lookup(&sym_name) {
                     if let SimKindValue::Function { ref body, ref params }  = sym_value.kind_value {
-                        self.shift_input();
+                        self.shift_input()?;
                         let result = self._function_call_parameter(sym_name.as_str(), (*params).len())?;
 
                         let node = Node::FunctionCall { 
@@ -72,14 +75,14 @@ where S: SymbolLookup + Sized + Debug
                             value: sym_name,
                         };
                         result_params.push( node );
-                        self.shift_input();
+                        self.shift_input()?;
                     }
                 } else {
                     let node = Node::Identifier { 
                         value: sym_name,
                     };
                     result_params.push( node );
-                    self.shift_input();
+                    self.shift_input()?;
                 }
             } else {
                 let node = match *ct.kind {
@@ -88,7 +91,7 @@ where S: SymbolLookup + Sized + Debug
                     _ => unreachable!("please check your code"),
                 };
                 result_params.push( node );
-                self.shift_input();
+                self.shift_input()?;
             }
         }
 
@@ -113,14 +116,14 @@ where S: SymbolLookup + Sized + Debug
             result.push(Node::Identifier { 
                 value: param_name,
             });
-            self.shift_input();
+            self.shift_input()?;
         }
         return Ok(result);
     }
 
     fn _function_expression(&mut self) -> Result<Node, String> {
         if is_enum_variant!(*self.curr_token.kind, Kind::FNOP) {
-            self.shift_input();
+            self.shift_input()?;
             return self._expression();
         }
         return Err("Syntax Error! function Expression".to_string());
@@ -129,7 +132,7 @@ where S: SymbolLookup + Sized + Debug
     fn _function_def(&mut self) -> Result<Node,String> {
         if let Kind::Letter(_) = &*self.curr_token.kind {
             let mut ct = self.curr_token.take();
-            self.shift_input();
+            self.shift_input()?;
             let result = Node::FunctionDef { 
                 name: (*ct.kind).take_letter().unwrap(), 
                 params: self._function_def_parameter()?, 
@@ -144,17 +147,17 @@ where S: SymbolLookup + Sized + Debug
         match &*self.curr_token.kind {
             Kind::FloatNumber(v) => {
                 let n = Node::Num { value: Value::FloatNumber(*v) };
-                self.shift_input();
+                self.shift_input()?;
                 return Ok(n);
             },
             Kind::IntNumber(v) => {
                 let n = Node::Num { value: Value::IntNumber(*v) };
-                self.shift_input();
+                self.shift_input()?;
                 return Ok(n);
             },
             Kind::Letter(var) => {
                 let var_name = var.clone();
-                self.shift_input();
+                self.shift_input()?;
                 let left: Node = if let Some(sym_val) = self.symbol_table.unwrap().lookup(&var_name) {
                                     match sym_val.kind_value {
                                         SimKindValue::Function { ref body, ref params, .. } =>
@@ -172,12 +175,12 @@ where S: SymbolLookup + Sized + Debug
                 return Ok(left);
             },
             Kind::LPAREN => {
-                self.shift_input();
+                self.shift_input()?;
                 let n = self._expression()?;
                 if !is_enum_variant!(*self.curr_token.kind, Kind::RPAREN) {
                     return Err("Expected String: )".to_string());
                 }
-                self.shift_input();
+                self.shift_input()?;
                 return Ok(n);
             },
             _ => {},
@@ -190,7 +193,7 @@ where S: SymbolLookup + Sized + Debug
 
         while self.curr_token.kind.is_op(|v| v == "*" || v == "/" || v == "%") {
             let tok = self.curr_token.take();
-            self.shift_input();
+            self.shift_input()?;
             let right = self._factor()?;
             result = Node::BinOp { 
                 left: Box::new(result),
@@ -209,7 +212,7 @@ where S: SymbolLookup + Sized + Debug
             let tok = self.curr_token.take();
             match &*tok.kind {
                 Kind::ASSIGN => {
-                    self.shift_input();
+                    self.shift_input()?;
                     result = Node::Assign { 
                         left: Box::new(result), 
                         right: Box::new(self._expression()?), 
@@ -217,7 +220,7 @@ where S: SymbolLookup + Sized + Debug
                 },
                 Kind::Op(v) => {
                     assert!( v == "+" || v == "-");
-                    self.shift_input();
+                    self.shift_input()?;
                     result = Node::BinOp { 
                         left: Box::new(result), 
                         op: v.clone(),
@@ -236,7 +239,7 @@ where S: SymbolLookup + Sized + Debug
                 if v != "fn" {
                     return Err("syntax error!".to_string());
                 } 
-                self.shift_input();
+                self.shift_input()?;
                 return self._function_def();
             },
             _ => {
@@ -247,7 +250,7 @@ where S: SymbolLookup + Sized + Debug
 
     pub fn parse(&mut self) -> Result<Option<Node>,String> 
     {
-        self.shift_input();
+        self.shift_input()?;
         let ast = self.stmt()?;
 
         if !self.curr_token.is_none() {
