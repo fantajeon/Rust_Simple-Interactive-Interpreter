@@ -88,7 +88,7 @@ where S: SymbolLookup + Sized + Debug
         }
 
         if result_params.len() != num_params {
-            return Err("Parsing error, not enough to be parameters".to_string());
+            return Err(format!("Parsing error, not enough to be parameters of function {}", func_name));
         }
 
         return Ok(result_params);
