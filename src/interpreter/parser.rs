@@ -60,8 +60,7 @@ where S: SymbolLookup + Sized + Debug
                 || is_enum_variant!(&*self.curr_token.kind, Kind::FloatNumber(_)) ) {
                 return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
             }
-            let ct = self.curr_token.take();
-            self.shift_input()?;
+            let ct = self.shift_input()?;
             match *ct.kind {
                 Kind::Letter(_) => {
                     let sym_name = &ct.raw_string;
