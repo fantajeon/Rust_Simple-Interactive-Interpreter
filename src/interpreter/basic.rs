@@ -35,17 +35,13 @@ impl Kind {
         }
     }
 
-    pub fn take_op(&mut self) -> Option<String> {
+    pub fn is_op<F>(&self, pred: F) -> bool 
+    where F: FnOnce(&str) -> bool
+    {
         match self {
-            Kind::Op(v) => {
-                Some(std::mem::replace(v, "".to_string()))
-            },
-            _ => None,
+            Kind::Op(v) => return pred( &v ),
+            _ => return false,
         }
-    }
-
-    pub fn is_op(&self) -> bool {
-        is_enum_variant!(self, Kind::Op(_))
     }
 }
 
@@ -165,14 +161,6 @@ impl Token {
 
     pub fn replace(&mut self, tok: Token) -> Token {
         std::mem::replace(self, tok)
-    }
-
-    pub fn take_if<F: FnOnce(&Self) -> bool>(&mut self, predicate: F) -> Option<Self> {
-        if predicate(self) {
-            Some(std::mem::replace(self,Token::default()))
-        } else {
-            None
-        }
     }
 }
 

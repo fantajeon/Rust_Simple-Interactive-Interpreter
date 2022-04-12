@@ -188,24 +188,15 @@ where S: SymbolLookup + Sized + Debug
     fn _term(&mut self) -> Result<Node,String> {
         let mut result = self._factor()?;
 
-        loop {
-            if let Some(mut tok) = self.curr_token.take_if(|v| v.kind.is_op()) {
-                let v = tok.kind.op().unwrap();
-                if v == "*" || v == "/" || v == "%" {
-                    self.shift_input();
-                    let right = self._factor()?;
-                    result = Node::BinOp { 
-                        left: Box::new(result),
-                        op: tok.kind.take_op().unwrap(),
-                        right: Box::new(right),
-                    };
-                } else {
-                    self.curr_token.replace(tok);
-                    break;
-                }
-            } else {
-                break;
-            }
+        while self.curr_token.kind.is_op(|v| v == "*" || v == "/" || v == "%") {
+            let tok = self.curr_token.take();
+            self.shift_input();
+            let right = self._factor()?;
+            result = Node::BinOp { 
+                left: Box::new(result),
+                op: tok.kind.op().unwrap().clone(),
+                right: Box::new(right),
+            };
         }
         return Ok(result);
     }
