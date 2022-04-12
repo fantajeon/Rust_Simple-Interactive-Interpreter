@@ -19,9 +19,7 @@ pub fn lexer(express: &str) -> Result<VecDeque<Token>, String> {
     for cap in re.captures_iter(express) {
         let tok = re.capture_names()
             .flatten()
-            .filter_map(|n| {
-                return Some((n,cap.name(n)?.as_str().to_string()));
-            })
+            .filter_map(|n| Some((n,cap.name(n)?.as_str().to_string())) )
             .take(1).next().unwrap();
         let t: Option<Token> = match tok.0 {
             "int" => Some( Token::new( Kind::IntNumber(tok.1.parse::<i32>().unwrap()), &tok.1) ),
