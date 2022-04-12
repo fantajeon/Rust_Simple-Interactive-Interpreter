@@ -152,10 +152,6 @@ impl Token {
         is_enum_variant!(*self.kind, Kind::Eof)
     }
 
-    pub fn is_letter(&self) -> bool {
-        is_enum_variant!(*self.kind, Kind::Letter(_))
-    }
-    
     pub fn take(&mut self) -> Token {
         std::mem::replace(self,Token::default())
     }

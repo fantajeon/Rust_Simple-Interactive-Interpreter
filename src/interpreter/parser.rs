@@ -61,10 +61,10 @@ where S: SymbolLookup + Sized + Debug
                 return Err( format!("Error Unexpected Token: {:?} during function call", self.curr_token) );
             }
             let ct = self.shift_input()?;
-            match *ct.kind {
+            result_params.push( match *ct.kind {
                 Kind::Letter(_) => {
                     let sym_name = &ct.raw_string;
-                    let node = self.symbol_table.unwrap().lookup(&sym_name).map_or(Ok(Node::Identifier { value: sym_name.to_string() }), 
+                    self.symbol_table.unwrap().lookup(&sym_name).map_or(Ok(Node::Identifier { value: sym_name.to_string() }), 
                         |sym_val| -> Result<Node, String> {
                             match sym_val.kind_value {
                                 SimKindValue::Function { ref body, ref params } => {
@@ -79,13 +79,12 @@ where S: SymbolLookup + Sized + Debug
                                 },
                                 _ => Ok(Node::Identifier { value: sym_name.to_string() }),
                             }
-                        })?;
-                    result_params.push(node);
+                        })?
                 },
-                Kind::FloatNumber(v) => result_params.push( Node::Num { value: v.into()} ),
-                Kind::IntNumber(v) => result_params.push( Node::Num { value: v.into()} ),
+                Kind::FloatNumber(v) => Node::Num { value: v.into() },
+                Kind::IntNumber(v) => Node::Num { value: v.into() },
                 _ => unreachable!("please check your code"),
-            }
+            })
         }
 
         if result_params.len() != num_params {
@@ -99,17 +98,14 @@ where S: SymbolLookup + Sized + Debug
         let mut result: Vec<Node> = Vec::new();
         let mut params_set: HashSet<String> = HashSet::new();
         while is_enum_variant!(&*self.curr_token.kind, Kind::Letter(_)) {
-            let mut ct = self.curr_token.take();
+            let mut ct = self.shift_input()?;
             let param_name = ct.kind.take_letter().unwrap();
 
             if params_set.get(&param_name).is_some() {
                 return Err(format!("parameter name is duplicated! {}", param_name));
             }
             params_set.insert( param_name.to_string() );
-            result.push(Node::Identifier { 
-                value: param_name,
-            });
-            self.shift_input()?;
+            result.push(Node::Identifier { value: param_name, });
         }
         return Ok(result);
     }
@@ -173,7 +169,7 @@ where S: SymbolLookup + Sized + Debug
                 if !is_enum_variant!(*self.curr_token.kind, Kind::RPAREN) {
                     return Err("Expected String: )".to_string());
                 }
-                self.shift_input()?;
+                self.shift_input()?; // FEED RPAREN
                 return Ok(n);
             },
             _ => {},
@@ -185,8 +181,7 @@ where S: SymbolLookup + Sized + Debug
         let mut result = self._factor()?;
 
         while self.curr_token.kind.is_op(|v| v == "*" || v == "/" || v == "%") {
-            let tok = self.curr_token.take();
-            self.shift_input()?;
+            let tok = self.shift_input()?;
             let right = self._factor()?;
             result = Node::BinOp { 
                 left: Box::new(result),
@@ -202,10 +197,9 @@ where S: SymbolLookup + Sized + Debug
 
         while is_enum_variant!(&*self.curr_token.kind, Kind::ASSIGN) 
             || is_enum_variant!(&*self.curr_token.kind, Kind::Op(_)) {
-            let tok = self.curr_token.take();
+            let tok = self.shift_input()?;
             match &*tok.kind {
                 Kind::ASSIGN => {
-                    self.shift_input()?;
                     result = Node::Assign { 
                         left: Box::new(result), 
                         right: Box::new(self._expression()?), 
@@ -213,7 +207,6 @@ where S: SymbolLookup + Sized + Debug
                 },
                 Kind::Op(v) => {
                     assert!( v == "+" || v == "-");
-                    self.shift_input()?;
                     result = Node::BinOp { 
                         left: Box::new(result), 
                         op: v.clone(),
