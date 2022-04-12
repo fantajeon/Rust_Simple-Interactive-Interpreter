@@ -38,6 +38,7 @@ fn test_op_sequence() {
 fn test_empty() {
     let mut i = Interpreter::new();
     assert_eq!(i.input("  "), Ok(None));
+    assert_eq!(i.input(""), Ok(None));
 }
 
 #[test]

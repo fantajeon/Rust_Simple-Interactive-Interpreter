@@ -64,9 +64,6 @@ impl Interpreter {
 
 
     pub fn input(&mut self, input: &str) -> Result<Option<f32>, String> {
-        if input.len() == 0 {
-            return Ok(None);
-        }
         self.line += 1;
         println!("########## > tokenizing={} @ line{}", input, self.line);
         let tokens = lexer(input)?;
@@ -79,13 +76,7 @@ impl Interpreter {
         let mut parser = Parser::new(self, tokens);
 
         let ast = parser.parse()?;
-        let result = self.evaluate(&ast.unwrap())?;
-
-        let last_value = Some(Rc::clone(&result));
-        if let Some(r) = last_value {
-            return Ok(r.get_result());
-        }
-        return Err("Unknown result".to_string());
+        return Ok(self.evaluate(&ast.unwrap())?.get_result());
     }
 
     fn push_stack_frame(&mut self,  frame: ScopeSymbolTable) {
