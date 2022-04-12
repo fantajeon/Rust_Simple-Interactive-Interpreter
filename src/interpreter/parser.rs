@@ -44,9 +44,11 @@ where S: SymbolLookup + Sized + Debug
 
         assert!( !is_enum_variant!( &*self.curr_token.kind, Kind::Eof) );
 
-        //let new = self.input.pop_front().unwrap_or(Token::default());
-        let new = self.input.pop_front().unwrap();
-        return Ok(std::mem::replace( &mut self.curr_token, new));
+        return Ok( std::mem::replace( 
+                    &mut self.curr_token, 
+                    self.input.pop_front().unwrap()
+                )
+            );
     }
 
     fn _function_call_parameter(&mut self, func_name: &str, num_params: usize) -> Result<Vec<Node>, String> {
