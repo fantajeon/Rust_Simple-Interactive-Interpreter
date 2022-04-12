@@ -27,7 +27,6 @@ digit           ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 pub struct Interpreter {
     func: HashMap<String,Rc<Node>>,
     current_scope: Box<ScopeSymbolTable>,
-    //ast: Vec<Rc<Node>>,
     line: u32,
 }
 
@@ -42,7 +41,6 @@ impl Interpreter {
         Interpreter { 
             current_scope: Box::new(ScopeSymbolTable::new(None)),
             func: HashMap::new(), 
-            //ast: Vec::new(),
             line: 0,
         }
     }
