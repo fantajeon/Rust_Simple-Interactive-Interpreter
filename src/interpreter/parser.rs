@@ -213,7 +213,8 @@ where S: SymbolLookup + Sized + Debug
     fn _expression(&mut self) -> Result<Node,String> {
         let mut result = self._term()?;
 
-        loop {
+        while is_enum_variant!(&*self.curr_token.kind, Kind::ASSIGN) 
+            || is_enum_variant!(&*self.curr_token.kind, Kind::Op(_)) {
             let tok = self.curr_token.take();
             match &*tok.kind {
                 Kind::ASSIGN => {
@@ -232,10 +233,7 @@ where S: SymbolLookup + Sized + Debug
                         right: Box::new(self._term()?), 
                     };
                 },
-                _ => {
-                    self.curr_token.replace(tok);
-                    break
-                },
+                _ => {},
             };
         }
         return Ok(result);
